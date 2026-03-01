@@ -15,6 +15,6 @@ dependencies:
   #   # All dependencies of `main` are public by default.
   #   public: true
   espressif/esp-dsp: '*'
-  lvgl/lvgl: ^9.4.0
-  espressif/esp_lvgl_port: ^2.6.2
-  espressif/esp_lcd_sh1107: ^1.1.0
+  # lvgl/lvgl: ^9.4.0
+  # espressif/esp_lvgl_port: ^2.6.2
+  # espressif/esp_lcd_sh1107: ^1.1.0

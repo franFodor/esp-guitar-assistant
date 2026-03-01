@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SERVER_H
+#define SERVER_H
 
 #include <string.h>
 #include "esp_wifi.h"
@@ -12,8 +13,24 @@
 #define WIFI_AP_CHANNEL   1
 #define WIFI_AP_MAX_CONN  4
 
-void web_server_start(void);
+/**
+ * Initialize and start the WiFi access point
+ */
 void wifi_ap_start(void);
 
-// call from audio processing
+/**
+ * Start the HTTP web server
+ * Serves static files from SPIFFS and provides JSON API endpoint
+ */
+void web_server_start(void);
+
+/**
+ * Update the current note detection data
+ * 
+ * @param note Name of the detected note (e.g., "D3")
+ * @param frequency Detected frequency in Hz
+ * @param cents Deviation from the target note in cents
+ */
 void web_server_update_note(const char *note, float frequency, float cents);
+
+#endif // SERVER_H
