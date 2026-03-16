@@ -97,46 +97,6 @@ You could also use the ESP-IDF extension in Visual Studio Code.
 3. Connect to the WiFi and web interface as above
 4. Strum a chord and view detection in serial monitor
 
-### Web Interface Pages
-
-| Page | Description |
-|------|-------------|
-| `/` | Home page with project info |
-| `/tuner.html` | Visual guitar tuner with meter |
-| `/scale.html` | Scale reference (if available) |
-| `/api/note` | JSON API for current note detection |
-
-### API Endpoint
-
-GET `/api/note` returns:
-```json
-{
-    "note": "E2",
-    "frequency": 82.41,
-    "cents": -2.5
-}
-```
-
-## Serial Monitor Output
-
-```
-I (0) main: Starting in TUNING mode
-I (0) wifi_ap: WiFi AP started
-I (tag): NOTE: E2  82.41 Hz cent: -1.23
-I (tag): NOTE: A2  110.00 Hz cent: 0.50
-```
-
-Chord mode:
-```
-I (0) main: Starting in CHORD DETECTION mode
-I (chord): Chord: E major (confidence: 0.85)
-I (chord): Chord: A minor (confidence: 0.72)
-```
-
-## License
-
-This project is provided as-is for educational purposes.
-
 ## References
 
 - [FFT-based Pitch Detection](http://musicweb.ucsd.edu/~trsmyth/analysis/analysis.pdf)
