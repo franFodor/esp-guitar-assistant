@@ -185,7 +185,26 @@ void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* resul
         } else {
             snprintf(result->name, sizeof(result->name), "%s minor", NOTE_NAMES[best_root]);
         }
-        ESP_LOGI(TAG, "Chord: %s", result->name);
+        
+        // Populate individual notes based on chord type
+        result->note_count = 3;
+        strncpy(result->notes[0], NOTE_NAMES[best_root], 7);
+        result->notes[0][7] = '\0';
+        
+        if (is_major) {
+            // Major chord: root, major third (4 semitones), perfect fifth (7 semitones)
+            strncpy(result->notes[1], NOTE_NAMES[(best_root + 4) % 12], 7);
+            strncpy(result->notes[2], NOTE_NAMES[(best_root + 7) % 12], 7);
+        } else {
+            // Minor chord: root, minor third (3 semitones), perfect fifth (7 semitones)
+            strncpy(result->notes[1], NOTE_NAMES[(best_root + 3) % 12], 7);
+            strncpy(result->notes[2], NOTE_NAMES[(best_root + 7) % 12], 7);
+        }
+        result->notes[1][7] = '\0';
+        result->notes[2][7] = '\0';
+        
+        ESP_LOGI(TAG, "Chord: %s (Notes: %s, %s, %s)", 
+                 result->name, result->notes[0], result->notes[1], result->notes[2]);
     }
 
     // Reset accumulator

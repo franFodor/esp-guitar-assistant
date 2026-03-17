@@ -1,4 +1,5 @@
 #include "server.h"
+#include "chord.h"
 
 static httpd_handle_t server = NULL;
 
@@ -11,8 +12,10 @@ static char cached_note_response[128] = "{\"note\":\"None\",\"frequency\":0.00,\
 
 // Chord detection data
 static char current_chord[32] = "None";
+static char current_notes[MAX_CHORD_NOTES][8] = {""};
+static int current_note_count = 0;
 static SemaphoreHandle_t chord_mutex;
-static char cached_chord_response[128] = "{\"chord\":\"None\"}";
+static char cached_chord_response[256] = "{\"chord\":\"None\",\"notes\":[]}";
 
 static const char *TAG = "wifi_ap";
 
@@ -86,17 +89,35 @@ void web_server_update_note(const char *note, float frequency, float cents) {
     xSemaphoreGive(note_mutex);
 }
 
-void web_server_update_chord(const char *chord) {
+void web_server_update_chord(const char *chord, const char notes[][8], int note_count) {
     if (!chord_mutex) return;
 
     xSemaphoreTake(chord_mutex, portMAX_DELAY);
     strncpy(current_chord, chord, sizeof(current_chord) - 1);
     current_chord[sizeof(current_chord) - 1] = 0;
 
+    // Store individual notes
+    current_note_count = note_count;
+    for (int i = 0; i < note_count && i < MAX_CHORD_NOTES; i++) {
+        strncpy(current_notes[i], notes[i], 7);
+        current_notes[i][7] = '\0';
+    }
+
     // Pre-generate JSON response for faster serving
+    char notes_json[128] = "[]";
+    if (note_count > 0) {
+        char* ptr = notes_json;
+        ptr += sprintf(ptr, "[");
+        for (int i = 0; i < note_count; i++) {
+            if (i > 0) ptr += sprintf(ptr, ",");
+            ptr += sprintf(ptr, "\"%s\"", current_notes[i]);
+        }
+        ptr += sprintf(ptr, "]");
+    }
+
     snprintf(cached_chord_response, sizeof(cached_chord_response),
-             "{\"chord\":\"%s\"}",
-             current_chord);
+             "{\"chord\":\"%s\",\"notes\":%s}",
+             current_chord, notes_json);
 
     xSemaphoreGive(chord_mutex);
 }

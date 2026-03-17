@@ -1,14 +1,261 @@
 const TEST_MODE = true; // Set to false to use real ESP data
-let lastChord = "None";
+let selectedChordName = "A major"; // User's selected chord to practice
+let detectedChordName = "None"; // Chord detected by API
+let detectedNotes = [];
 
-function updateChordDisplay(chord) {
+// Note positions on fretboard for standard tuning
+function getNoteAtFret(string, fret) {
+    const openNotes = ["E", "A", "D", "G", "B", "E"];
+    const noteOrder = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    
+    let baseIndex = noteOrder.indexOf(openNotes[string]);
+    if (baseIndex === -1) baseIndex = 0;
+    
+    let noteIndex = (baseIndex + fret) % 12;
+    return noteOrder[noteIndex];
+}
+
+function updateChordDisplay(chord, notes) {
     const chordNameEl = document.getElementById('chord-name');
+    const notesContainerEl = document.getElementById('notes-display');
+    
     if (chord && chord !== "None") {
         chordNameEl.textContent = chord;
         chordNameEl.classList.add('detected');
+        
+        // Store detected chord info
+        detectedChordName = chord;
+        detectedNotes = notes || [];
+        
+        // Display individual notes
+        if (notesContainerEl && notes && notes.length > 0) {
+            notesContainerEl.innerHTML = '<strong>Notes:</strong> ' + notes.join(', ');
+            notesContainerEl.style.display = 'block';
+        } else {
+            notesContainerEl.style.display = 'none';
+        }
     } else {
         chordNameEl.textContent = "--";
         chordNameEl.classList.remove('detected');
+        detectedChordName = "None";
+        detectedNotes = [];
+        if (notesContainerEl) {
+            notesContainerEl.style.display = 'none';
+        }
+    }
+    
+    // Highlight fretboard based on whether detected matches selected
+    highlightFretboard();
+}
+
+function highlightFretboard() {
+    // Check if detected chord matches selected chord
+    const isCorrect = (detectedChordName === selectedChordName && detectedChordName !== "None");
+    
+    // Get the chord positions to display (use selected chord for fingering guide)
+    const chordData = CHORDS[selectedChordName];
+    if (!chordData || !chordData.positions) {
+        return;
+    }
+    
+    // First render the selected chord positions in blue (target notes)
+    highlightSelectedChord(chordData.positions);
+    
+    // Then overlay the detected notes in green (correct) or red (wrong)
+    if (detectedNotes.length > 0) {
+        highlightDetectedNotes(detectedNotes, isCorrect);
+    }
+}
+
+function highlightSelectedChord(positions) {
+    const fretboard = document.getElementById('fretboard');
+    const cells = fretboard.getElementsByClassName('fret-cell');
+    const xoCells = fretboard.getElementsByClassName('fret-xo');
+    
+    // Highlight the selected chord positions in blue (target)
+    for (let string = 5; string >= 0; string--) {
+        const pos = positions[string][0];
+        const finger = positions[string][1];
+        
+        if (pos === null) {
+            continue;
+        } else if (pos === 0) {
+            // Open string - style the O circle
+            const xoCellIndex = 5 - string;
+            if (xoCells[xoCellIndex]) {
+                const oCircle = xoCells[xoCellIndex].querySelector('.fret-o');
+                if (oCircle) {
+                    oCircle.classList.add('fret-circle-target');
+                }
+            }
+        } else {
+            // Fretted note
+            const fretIndex = pos - 1;
+            const cellIndex = (5 - string) * 12 + fretIndex;
+            
+            if (cellIndex >= 0 && cellIndex < cells.length) {
+                const cell = cells[cellIndex];
+                const existingFretCircle = cell.querySelector('.fret-circle');
+                
+                if (existingFretCircle) {
+                    existingFretCircle.classList.add('fret-circle-target');
+                }
+            }
+        }
+    }
+}
+
+function highlightDetectedNotes(notes, isCorrect) {
+    const fretboard = document.getElementById('fretboard');
+    const cells = fretboard.getElementsByClassName('fret-cell');
+    const xoCells = fretboard.getElementsByClassName('fret-xo');
+    const openNotes = ["E", "A", "D", "G", "B", "E"];
+    
+    // Get target chord notes
+    const targetChordData = CHORDS[selectedChordName];
+    const targetNotes = targetChordData ? targetChordData.notes : [];
+    
+    // Highlight detected notes at open strings
+    for (let string = 5; string >= 0; string--) {
+        const openNote = openNotes[string];
+        if (notes.includes(openNote)) {
+            const xoCellIndex = 5 - string;
+            if (xoCells[xoCellIndex]) {
+                const oCircle = xoCells[xoCellIndex].querySelector('.fret-o');
+                if (oCircle) {
+                    // Check if this detected note is in target chord
+                    if (targetNotes.includes(openNote)) {
+                        oCircle.classList.add('fret-circle-correct');
+                    } else {
+                        oCircle.classList.add('fret-circle-incorrect');
+                    }
+                }
+            }
+        }
+    }
+    
+    // Highlight detected notes at fret positions 1-3 only (not including 4th fret)
+    let cellIndex = 0;
+    for (let string = 5; string >= 0; string--) {
+        for (let fret = 0; fret < 12; fret++) {
+            const displayFret = fret + 1;
+            
+            // Only highlight up to 3rd fret (not including 4th)
+            if (displayFret >= 4) {
+                cellIndex++;
+                continue;
+            }
+            
+            const noteAtPosition = getNoteAtFret(string, displayFret);
+            
+            if (notes.includes(noteAtPosition)) {
+                const cell = cells[cellIndex];
+                const existingFretCircle = cell.querySelector('.fret-circle');
+                
+                // Check if this detected note is in target chord
+                const isTargetNote = targetNotes.includes(noteAtPosition);
+                
+                if (existingFretCircle) {
+                    // Color the finger circle based on whether note is in target
+                    if (isTargetNote) {
+                        existingFretCircle.classList.add('fret-circle-correct');
+                    } else {
+                        existingFretCircle.classList.add('fret-circle-incorrect');
+                    }
+                } else {
+                    // Add a note circle for detected notes
+                    const circle = document.createElement('div');
+                    circle.className = 'note-circle';
+                    circle.textContent = noteAtPosition;
+                    if (isTargetNote) {
+                        circle.classList.add('note-circle-correct');
+                    } else {
+                        circle.classList.add('note-circle-incorrect');
+                    }
+                    cell.appendChild(circle);
+                }
+            }
+            cellIndex++;
+        }
+    }
+}
+
+function highlightChordNotes(notes, isCorrect) {
+    const fretboard = document.getElementById('fretboard');
+    const cells = fretboard.getElementsByClassName('fret-cell');
+    const xoCells = fretboard.getElementsByClassName('fret-xo');
+
+    // Remove all existing note circles and reset fret circles
+    const existingNoteCircles = fretboard.querySelectorAll('.note-circle');
+    existingNoteCircles.forEach(el => el.remove());
+    
+    const existingFretCircles = fretboard.querySelectorAll('.fret-circle');
+    existingFretCircles.forEach(el => {
+        el.classList.remove('fret-circle-correct', 'fret-circle-incorrect');
+    });
+
+    if (!notes || notes.length === 0) {
+        return;
+    }
+
+    // Get the selected chord positions (what user should play)
+    const chordData = CHORDS[selectedChordName];
+    if (!chordData || !chordData.positions) {
+        return;
+    }
+    
+    const positions = chordData.positions;
+    
+    // Highlight the selected chord positions based on whether detected matches
+    for (let string = 5; string >= 0; string--) {
+        const pos = positions[string][0];
+        const finger = positions[string][1];
+        
+        if (pos === null) {
+            // Muted string (X) - don't highlight
+            continue;
+        } else if (pos === 0) {
+            // Open string (O) - highlight the O circle
+            const xoCellIndex = 5 - string;
+            if (xoCells[xoCellIndex]) {
+                const oCircle = xoCells[xoCellIndex].querySelector('.fret-o');
+                if (oCircle) {
+                    if (isCorrect) {
+                        oCircle.classList.add('fret-circle-correct');
+                    } else {
+                        oCircle.classList.add('fret-circle-incorrect');
+                    }
+                }
+            }
+        } else {
+            // Fretted note - highlight the fret circle
+            const fretIndex = pos - 1;
+            const cellIndex = (5 - string) * 12 + fretIndex;
+            
+            if (cellIndex >= 0 && cellIndex < cells.length) {
+                const cell = cells[cellIndex];
+                const existingFretCircle = cell.querySelector('.fret-circle');
+                
+                if (existingFretCircle) {
+                    if (isCorrect) {
+                        existingFretCircle.classList.add('fret-circle-correct');
+                    } else {
+                        existingFretCircle.classList.add('fret-circle-incorrect');
+                    }
+                } else {
+                    const noteAtPosition = getNoteAtFret(string, pos);
+                    const circle = document.createElement('div');
+                    circle.className = 'note-circle';
+                    circle.textContent = noteAtPosition;
+                    if (isCorrect) {
+                        circle.classList.add('note-circle-correct');
+                    } else {
+                        circle.classList.add('note-circle-incorrect');
+                    }
+                    cell.appendChild(circle);
+                }
+            }
+        }
     }
 }
 
@@ -16,14 +263,20 @@ async function fetchChord() {
     try {
         let data;
         if (TEST_MODE) {
-            data = { chord: "A major" }; // Example test data
+            // In test mode, always return A major as detected
+            // Select different chords from dropdown to see red (wrong) or green (correct)
+            data = { chord: "A major", notes: ["A", "C#", "E"] };
         } else {
             const response = await fetch('/api/chord');
             data = await response.json();
         }
-        if (data.chord !== lastChord) {
-            lastChord = data.chord;
-            updateChordDisplay(data.chord);
+        if (data.chord !== detectedChordName || JSON.stringify(data.notes) !== JSON.stringify(detectedNotes)) {
+            updateChordDisplay(data.chord, data.notes);
+            
+            // Re-render fretboard with selected chord positions
+            if (CHORDS[selectedChordName]) {
+                renderFretboard(CHORDS[selectedChordName].positions);
+            }
         }
     } catch (error) {
         console.error('Error fetching chord:', error);
@@ -32,7 +285,6 @@ async function fetchChord() {
 
 // Chord dropdown and fretboard rendering
 const chordNames = Object.keys(CHORDS);
-let selectedChord = chordNames[0];
 
 function renderDropdown() {
     const dropdown = document.getElementById('chord-dropdown');
@@ -43,12 +295,13 @@ function renderDropdown() {
         option.textContent = name;
         dropdown.appendChild(option);
     });
-    dropdown.value = selectedChord;
+    dropdown.value = selectedChordName;
 }
 
 function handleDropdownChange(e) {
-    selectedChord = e.target.value;
-    renderFretboard(CHORDS[selectedChord]);
+    selectedChordName = e.target.value;
+    renderFretboard(CHORDS[selectedChordName].positions);
+    highlightFretboard();
 }
 
 function renderFretboard(chordPositions = null) {
@@ -59,11 +312,33 @@ function renderFretboard(chordPositions = null) {
         const xoCell = document.createElement('div');
         xoCell.className = 'fret-xo';
         let mark = null;
+        let isMuted = false;
+        let isOpen = false;
         if (chordPositions) {
-            if (chordPositions[string][0] === null) mark = '×';
-            else if (chordPositions[string][0] === 0) mark = 'O';
+            if (chordPositions[string][0] === null) {
+                mark = '×';
+                isMuted = true;
+            } else if (chordPositions[string][0] === 0) {
+                mark = 'O';
+                isOpen = true;
+            }
         }
-        xoCell.textContent = mark ? mark : '';
+        
+        // Create circle for X/O markers
+        if (mark) {
+            const circle = document.createElement('div');
+            circle.className = 'fret-circle fret-xo-circle';
+            circle.textContent = mark;
+            circle.dataset.string = string;
+            circle.dataset.fret = isMuted ? -1 : 0;
+            if (isMuted) {
+                circle.classList.add('fret-x');
+            } else if (isOpen) {
+                circle.classList.add('fret-o');
+            }
+            xoCell.appendChild(circle);
+        }
+        
         fretboard.appendChild(xoCell);
         for (let fret = 0; fret < 12; fret++) {
             const cell = document.createElement('div');
@@ -103,11 +378,13 @@ $(document).ready(function() {
             $('#nav-chord').addClass('active').append('<span class="sr-only">(current)</span>');
         });
 
-    // Start polling for chord data
+    // Start polling for chord data (includes notes)
     setInterval(fetchChord, 200);
 
     // Initialize dropdown and fretboard
     renderDropdown();
-    renderFretboard(CHORDS[selectedChord]);
+    renderFretboard(CHORDS[selectedChordName].positions);
+    highlightFretboard();
+
     document.getElementById('chord-dropdown').addEventListener('change', handleDropdownChange);
 });

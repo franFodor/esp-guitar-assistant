@@ -40,7 +40,9 @@ void web_server_update_note(const char *note, float frequency, float cents);
  * Update the current chord detection data
  *
  * @param chord Name of the detected chord (e.g., "C major")
+ * @param notes Array of individual note names (e.g., ["C", "E", "G"])
+ * @param note_count Number of notes in the chord
  */
-void web_server_update_chord(const char *chord);
+void web_server_update_chord(const char *chord, const char notes[][8], int note_count);
 
 #endif // SERVER_H

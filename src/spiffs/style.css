@@ -332,7 +332,7 @@ a:hover {
     top: 100%;
     left: 50%;
     transform: translate(-50%, 0);
-    margin-top: 2px;
+    margin-top: 10px;
 }
 
 .fret-cell.last-row {
@@ -359,18 +359,69 @@ a:hover {
     z-index: 2;
     border: 2px solid var(--fg);
 }
+
+.fret-xo-circle {
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1rem;
+}
+
+.fret-circle-target {
+    background: var(--blue);
+}
+
+.fret-circle-correct {
+    background: var(--green) !important;
+}
+
+.fret-circle-incorrect {
+    background: var(--red) !important;
+}
 .fret-xo {
-    font-size: 1.5rem;
-    color: var(--yellow);
-    font-weight: bold;
-    pointer-events: none;
-    z-index: 3;
-    text-shadow: 0 2px 8px var(--bg), 0 0 2px var(--yellow);
     height: 32px;
     width: 32px;
     transform: translateY(-16px);
     vertical-align: bottom;
     text-align: center;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fret-xo .fret-circle {
+    position: static;
+    transform: none;
+    margin: 0 auto;
+}
+
+/* Played note highlighting */
+.note-circle {
+    width: 26px;
+    height: 26px;
+    background: var(--green);
+    border-radius: 50%;
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg);
+    font-weight: bold;
+    font-size: 0.9rem;
+    z-index: 1;
+    border: 2px solid var(--fg);
+}
+
+.note-circle-correct {
+    background: var(--green);
+}
+
+.note-circle-incorrect {
+    background: var(--red);
 }
 
 #fretboard-container {

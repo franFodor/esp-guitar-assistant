@@ -34,6 +34,8 @@ static const float MINOR_TEMPLATE[NUM_PITCH_CLASSES] = {
     0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
+#define MAX_CHORD_NOTES 4
+
 /**
  * Chord detection result
  */
@@ -41,6 +43,8 @@ typedef struct {
     char name[32];      // Chord name (e.g., "C major", "D# minor")
     int valid;          // 1 if valid chord detected, 0 otherwise
     float amplitude;    // Detected audio amplitude (RMS)
+    char notes[MAX_CHORD_NOTES][8];  // Individual notes (e.g., "C", "E", "G")
+    int note_count;     // Number of notes in the chord
 } chord_result_t;
 
 /**
