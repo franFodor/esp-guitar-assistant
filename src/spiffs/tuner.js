@@ -116,6 +116,7 @@ $(document).on('click', function(e) {
 });
 
 $(document).ready(function() {
+    fetch('/api/mode', { method: 'POST', body: 'note' }).catch(() => {});
     renderTuningDropdown();
     document.getElementById('tuning-dropdown').addEventListener('change', handleTuningDropdownChange);
     update();

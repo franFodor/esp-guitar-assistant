@@ -1,6 +1,5 @@
 //http://musicweb.ucsd.edu/~trsmyth/analysis/analysis.pdf
 
-// TODO sort out includes
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -16,11 +15,8 @@
 #include "esp_spiffs.h"
 
 #include "server.h"
-#include "tuning.h"
+#include "note.h"
 #include "chord.h"
-
-// Set to 1 for chord detection mode, 0 for tuning mode
-#define CHORD_DETECTION_MODE  1
 
 #define SAMPLE_RATE     16000
 #define SAMPLE_BITS     I2S_DATA_BIT_WIDTH_32BIT
@@ -67,87 +63,61 @@ static void i2s_reader_task(void* pvParameters) {
 }
 
 static void audio_processor_task(void* pvParameters) {
-    // allocate buffers on heap
     float* audio_buffer = (float*)malloc(FFT_SIZE * sizeof(float));
-    if (audio_buffer == NULL) {
-        ESP_LOGE("Processor", "Failed to allocate audio_buffer");
-        vTaskDelete(NULL);
-    }
+    float* hps          = (float*)malloc(FFT_SIZE / 2 * sizeof(float));
+    float* magnitude    = (float*)malloc(FFT_SIZE / 2 * sizeof(float));
 
-    float* hps = (float*)malloc(FFT_SIZE / 2 * sizeof(float));
-    if (hps == NULL) {
-        ESP_LOGE("Processor", "Failed to allocate hps");
-        vTaskDelete(NULL);
-    }
-
-    float* magnitude = (float*)malloc((FFT_SIZE / 2) * sizeof(float));
-    if (magnitude == NULL) {
-        ESP_LOGE("Processor", "Failed to allocate magnitude");
-        free(audio_buffer);
+    if (!audio_buffer || !hps || !magnitude) {
+        ESP_LOGE("Processor", "Buffer allocation failed");
         vTaskDelete(NULL);
     }
 
     float hann_window[FFT_SIZE];
     float fft_buffer[FFT_SIZE * 2];
     audio_buffer_t audio_buf;
+    chord_result_t chord_result;
 
     dsps_fft2r_init_fc32(NULL, FFT_SIZE);
     dsps_wind_hann_f32(hann_window, FFT_SIZE);
 
-#if CHORD_DETECTION_MODE
-    ESP_LOGI("Processor", "Starting in CHORD DETECTION mode");
+    note_init();
     chord_init();
-    chord_result_t chord_result;
-#else
-    ESP_LOGI("Processor", "Starting in TUNING mode");
-    tuning_init();
-#endif
 
     while (1) {
         xQueueReceive(audio_data_queue, &audio_buf, portMAX_DELAY);
 
-        // convert + window
         for (int i = 0; i < FFT_SIZE; i++) {
-            float sample = 0.0f;
-            if (i < (int)audio_buf.sample_count) {
-                sample = ((float)audio_buf.samples[i] / (float)INT32_MAX);
-            }
-
-            audio_buffer[i] = sample * hann_window[i];
-
+            float sample = (i < (int)audio_buf.sample_count)
+                ? ((float)audio_buf.samples[i] / (float)INT32_MAX)
+                : 0.0f;
+            audio_buffer[i]       = sample * hann_window[i];
             fft_buffer[2 * i]     = audio_buffer[i];
             fft_buffer[2 * i + 1] = 0.0f;
         }
 
-        // FFT processing
         dsps_fft2r_fc32(fft_buffer, FFT_SIZE);
         dsps_bit_rev_fc32(fft_buffer, FFT_SIZE);
         dsps_cplx2reC_fc32(fft_buffer, FFT_SIZE);
 
-        // compute magnitudes
         for (int i = 0; i < FFT_SIZE / 2; i++) {
             float real = fft_buffer[2 * i];
             float imag = fft_buffer[2 * i + 1];
             magnitude[i] = sqrtf(real * real + imag * imag);
         }
 
-#if CHORD_DETECTION_MODE
-        chord_detect(magnitude, audio_buffer, &chord_result);
-
-        if (chord_result.valid) {
-            web_server_update_chord(chord_result.name, (const char (*)[8])chord_result.notes, chord_result.note_count);
-            ESP_LOGI("chord", "Detected: %s (Notes: %s, %s, %s)", 
-                     chord_result.name, 
-                     chord_result.notes[0], 
-                     chord_result.notes[1], 
-                     chord_result.notes[2]);
+        if (web_server_get_mode() == DETECTION_MODE_NOTE) {
+            note_frequency_analysis(magnitude, hps);
+            vTaskDelay(pdMS_TO_TICKS(10));
+        } else {
+            chord_detect(magnitude, audio_buffer, &chord_result);
+            if (chord_result.valid) {
+                web_server_update_chord(chord_result.name,
+                    (const char (*)[8])chord_result.notes,
+                    chord_result.note_count);
+                ESP_LOGI("chord", "Detected: %s", chord_result.name);
+            }
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
-
-        vTaskDelay(pdMS_TO_TICKS(50));
-#else
-        tuning_frequency_analysis(magnitude, hps);
-        vTaskDelay(pdMS_TO_TICKS(10));
-#endif
     }
 
     free(hps);
@@ -165,9 +135,9 @@ static void setup_i2s() {
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = I2S_BCK_IO,
-            .ws = I2S_WS_IO,
+            .ws   = I2S_WS_IO,
             .dout = I2S_GPIO_UNUSED,
-            .din = I2S_DI_IO,
+            .din  = I2S_DI_IO,
         }
     };
 

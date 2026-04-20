@@ -16,33 +16,17 @@
 #define WIFI_AP_CHANNEL   1
 #define WIFI_AP_MAX_CONN  4
 
-/**
- * Initialize and start the WiFi access point
- */
-void wifi_ap_start(void);
+typedef enum {
+    DETECTION_MODE_NOTE = 0,
+    DETECTION_MODE_CHORD = 1
+} detection_mode_t;
 
-/**
- * Start the HTTP web server
- * Serves static files from SPIFFS and provides JSON API endpoint
- */
+void wifi_ap_start(void);
 void web_server_start(void);
 
-/**
- * Update the current note detection data
- *
- * @param note Name of the detected note (e.g., "D3")
- * @param frequency Detected frequency in Hz
- * @param cents Deviation from the target note in cents
- */
-void web_server_update_note(const char *note, float frequency, float cents);
+detection_mode_t web_server_get_mode(void);
 
-/**
- * Update the current chord detection data
- *
- * @param chord Name of the detected chord (e.g., "C major")
- * @param notes Array of individual note names (e.g., ["C", "E", "G"])
- * @param note_count Number of notes in the chord
- */
+void web_server_update_note(const char *note, float frequency, float cents);
 void web_server_update_chord(const char *chord, const char notes[][8], int note_count);
 
 #endif // SERVER_H

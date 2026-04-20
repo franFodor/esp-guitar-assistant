@@ -411,6 +411,8 @@ function renderFretboard(chordPositions = null) {
 
 
 $(document).ready(function() {
+    fetch('/api/mode', { method: 'POST', body: 'chord' }).catch(() => {});
+
     // Load navigation
     fetch('nav.html')
         .then(response => response.text())

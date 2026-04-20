@@ -130,3 +130,28 @@ a:hover {
     background-color: var(--blue);
     color: var(--fg);
 }
+
+.scale-root-circle {
+    background: var(--orange) !important;
+    color: var(--bg) !important;
+}
+
+.fret-circle.scale-note-circle {
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+.select-dark {
+    background-color: var(--bg1);
+    color: var(--fg);
+    border: 1px solid var(--bg2);
+    font-size: 1.1rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    min-width: 140px;
+}
+
+.select-dark:focus {
+    border-color: var(--yellow);
+    outline: none;
+}

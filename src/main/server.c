@@ -3,6 +3,9 @@
 
 static httpd_handle_t server = NULL;
 
+// Detection mode
+static volatile detection_mode_t current_mode = DETECTION_MODE_NOTE;
+
 // Note detection data
 static char current_note[8] = "None";
 static float current_freq = 0.0f;
@@ -71,7 +74,32 @@ static esp_err_t api_chord_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_mode_handler(httpd_req_t *req) {
+    char body[16] = {0};
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing body");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    if (strncmp(body, "chord", 5) == 0) {
+        current_mode = DETECTION_MODE_CHORD;
+        ESP_LOGI(TAG, "Mode -> CHORD");
+    } else {
+        current_mode = DETECTION_MODE_NOTE;
+        ESP_LOGI(TAG, "Mode -> NOTE");
+    }
+
+    httpd_resp_sendstr(req, "OK");
+    return ESP_OK;
+}
+
 /* ---------- PUBLIC API ---------- */
+detection_mode_t web_server_get_mode(void) {
+    return current_mode;
+}
+
 void web_server_update_note(const char *note, float frequency, float cents) {
     if (!note_mutex) return;
 
@@ -81,7 +109,6 @@ void web_server_update_note(const char *note, float frequency, float cents) {
     current_freq = frequency;
     current_cents = cents;
 
-    // Pre-generate JSON response for faster serving
     snprintf(cached_note_response, sizeof(cached_note_response),
              "{\"note\":\"%s\",\"frequency\":%.2f,\"cents\":%.1f}",
              current_note, current_freq, current_cents);
@@ -96,14 +123,12 @@ void web_server_update_chord(const char *chord, const char notes[][8], int note_
     strncpy(current_chord, chord, sizeof(current_chord) - 1);
     current_chord[sizeof(current_chord) - 1] = 0;
 
-    // Store individual notes
     current_note_count = note_count;
     for (int i = 0; i < note_count && i < MAX_CHORD_NOTES; i++) {
         strncpy(current_notes[i], notes[i], 7);
         current_notes[i][7] = '\0';
     }
 
-    // Pre-generate JSON response for faster serving
     char notes_json[128] = "[]";
     if (note_count > 0) {
         char* ptr = notes_json;
@@ -149,6 +174,12 @@ void web_server_start(void) {
         .handler  = api_chord_handler
     };
 
+    httpd_uri_t api_mode = {
+        .uri      = "/api/mode",
+        .method   = HTTP_POST,
+        .handler  = api_mode_handler
+    };
+
     httpd_uri_t test = {
         .uri      = "/test",
         .method   = HTTP_GET,
@@ -157,12 +188,12 @@ void web_server_start(void) {
 
     httpd_register_uri_handler(server, &api_note);
     httpd_register_uri_handler(server, &api_chord);
+    httpd_register_uri_handler(server, &api_mode);
     httpd_register_uri_handler(server, &test);
     httpd_register_uri_handler(server, &files);
 }
 
 void wifi_ap_start(void) {
-    /* NVS required */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
         ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -190,9 +221,8 @@ void wifi_ap_start(void) {
     strncpy((char *)ap_cfg.ap.password, WIFI_AP_PASS, sizeof(ap_cfg.ap.password));
     ap_cfg.ap.ssid_len = strlen(WIFI_AP_SSID);
 
-    if (strlen(WIFI_AP_PASS) == 0) {
+    if (strlen(WIFI_AP_PASS) == 0)
         ap_cfg.ap.authmode = WIFI_AUTH_OPEN;
-    }
 
     esp_wifi_set_mode(WIFI_MODE_AP);
     esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
