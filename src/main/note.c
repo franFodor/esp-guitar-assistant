@@ -13,8 +13,13 @@ static note_t chromatic_scale[] = {
 
 #define NUM_NOTES (sizeof(chromatic_scale) / sizeof(chromatic_scale[0]))
 
+// Persistence state: a note must be detected this many consecutive frames before publishing
+#define NOTE_STABILITY_FRAMES 3
+
 static float last_freq = 0.0f;
-static int no_detection_count = 0;
+static int   no_detection_count = 0;
+static char  pending_note[8] = "";
+static int   pending_count = 0;
 
 static float quadratic_interpolation(float* magnitudes, int peak_bin) {
     if (peak_bin <= 0 || peak_bin >= (FFT_SIZE/2 - 1))
@@ -29,8 +34,7 @@ static float quadratic_interpolation(float* magnitudes, int peak_bin) {
         return (float)peak_bin * SAMPLE_RATE / FFT_SIZE;
 
     float p = (alpha - gamma) / (2.0f * denom);
-    float peak = (float)peak_bin + p;
-    return peak * SAMPLE_RATE / FFT_SIZE;
+    return ((float)peak_bin + p) * SAMPLE_RATE / FFT_SIZE;
 }
 
 static float harmonic_product_spectrum(float* magnitudes, int half_size, float* hps) {
@@ -56,17 +60,11 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
         if (hps[i] > best_val) { best_val = hps[i]; best_bin = i; }
     }
 
-    // Octave correction
+    // Octave correction: if the lower octave has >= 25% of the peak's HPS energy,
+    // the guitar fundamental is likely there — prefer it over the harmonic.
     int lower_bin = best_bin / 2;
-    if (lower_bin >= min_bin) {
-        float chosen_amp = hps[best_bin];
-        float lower_amp  = hps[lower_bin];
-        float approx_half = fabsf(lower_amp - chosen_amp * 0.5f);
-        float ratio = lower_amp / (chosen_amp + 1e-12f);
-        const float RATIO_THRESHOLD = 0.05f;
-        if (approx_half < chosen_amp * 0.25f && ratio > RATIO_THRESHOLD)
-            best_bin = lower_bin;
-    }
+    if (lower_bin >= min_bin && hps[lower_bin] >= 0.25f * best_val)
+        best_bin = lower_bin;
 
     return quadratic_interpolation(hps, best_bin);
 }
@@ -93,14 +91,34 @@ void note_frequency_analysis(float* magnitudes, float* hps) {
 
     if (freq > 0.0f) {
         last_freq = freq;
+        no_detection_count = 0;
+
         float cents;
         const char* note = note_find_closest(freq, &cents);
-        web_server_update_note(note, freq, cents);
-        ESP_LOGI("note", "NOTE: %s  %.2f Hz cent: %.2f", note, freq, cents);
+
+        if (strcmp(note, pending_note) == 0) {
+            // Same note again — increment stability counter, capped to avoid overflow
+            if (pending_count < NOTE_STABILITY_FRAMES)
+                pending_count++;
+        } else {
+            // New candidate — reset and wait for it to stabilise
+            strncpy(pending_note, note, sizeof(pending_note) - 1);
+            pending_note[sizeof(pending_note) - 1] = '\0';
+            pending_count = 1;
+        }
+
+        // Only publish once the note has been stable for enough frames.
+        // After that, keep publishing every frame so freq/cents stay live.
+        if (pending_count >= NOTE_STABILITY_FRAMES) {
+            web_server_update_note(note, freq, cents);
+            ESP_LOGI("note", "NOTE: %s  %.2f Hz cent: %.2f", note, freq, cents);
+        }
     } else {
         no_detection_count++;
         if (no_detection_count > 20) {
             last_freq = 0.0f;
+            pending_count = 0;
+            pending_note[0] = '\0';
             no_detection_count = 0;
         }
     }
@@ -109,4 +127,6 @@ void note_frequency_analysis(float* magnitudes, float* hps) {
 void note_init(void) {
     last_freq = 0.0f;
     no_detection_count = 0;
+    pending_count = 0;
+    pending_note[0] = '\0';
 }

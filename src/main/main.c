@@ -27,6 +27,8 @@
 #define I2S_WS_IO       25
 #define I2S_DI_IO       33
 
+#define SILENCE_THRESHOLD  0.002f
+
 #define I2S_READER_TASK_PRIO   5
 #define I2S_READER_STACK_SIZE  5000
 #define PROCESSOR_TASK_PRIO    4
@@ -86,8 +88,22 @@ static void audio_processor_task(void* pvParameters) {
     while (1) {
         xQueueReceive(audio_data_queue, &audio_buf, portMAX_DELAY);
 
+        // RMS check on raw samples — skip FFT entirely if silent
+        float rms = 0.0f;
+        int n = (int)audio_buf.sample_count;
+        for (int i = 0; i < n; i++) {
+            float s = (float)audio_buf.samples[i] / (float)INT32_MAX;
+            rms += s * s;
+        }
+        rms = sqrtf(rms / n);
+
+        if (rms < SILENCE_THRESHOLD) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+
         for (int i = 0; i < FFT_SIZE; i++) {
-            float sample = (i < (int)audio_buf.sample_count)
+            float sample = (i < n)
                 ? ((float)audio_buf.samples[i] / (float)INT32_MAX)
                 : 0.0f;
             audio_buffer[i]       = sample * hann_window[i];

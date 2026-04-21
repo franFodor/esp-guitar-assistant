@@ -12,16 +12,6 @@ static const char* TAG = "chord";
 static float pitch_class_accumulator[NUM_PITCH_CLASSES] = {0};
 static int frame_count = 0;
 
-/**
- * Calculate RMS amplitude of audio samples
- */
-static float calculate_rms(float* samples, int num_samples) {
-    float sum = 0.0f;
-    for (int i = 0; i < num_samples; i++) {
-        sum += samples[i] * samples[i];
-    }
-    return sqrtf(sum / num_samples);
-}
 
 /**
  * Convert frequency to pitch class (0-11)
@@ -77,15 +67,6 @@ void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* resul
     // Initialize result as invalid
     result->valid = 0;
     result->name[0] = '\0';
-
-    // Calculate RMS amplitude
-    float rms = calculate_rms(audio_samples, CHORD_FFT_SIZE);
-    result->amplitude = rms;
-
-    // Check if audio level is above threshold
-    if (rms < CHORD_AMPLITUDE_THRESHOLD) {
-        return;
-    }
 
     // Accumulate pitch class energy over multiple frames
     float pitch_energy[NUM_PITCH_CLASSES] = {0};

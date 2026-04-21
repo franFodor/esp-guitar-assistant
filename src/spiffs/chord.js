@@ -1,4 +1,4 @@
-const TEST_MODE = false; // Set to false to use real ESP data
+const TEST_MODE = true; // Set to false to use real ESP data
 let selectedChordName = "A major"; // User's selected chord to practice
 let detectedChordName = "None"; // Chord detected by API
 let detectedNotes = [];
@@ -276,12 +276,11 @@ async function fetchChord() {
             data = await response.json();
         }
         if (data.chord !== detectedChordName || JSON.stringify(data.notes) !== JSON.stringify(detectedNotes)) {
-            updateChordDisplay(data.chord, data.notes);
-            
-            // Re-render fretboard with selected chord positions
+            // Render base fretboard first, then apply highlights on top
             if (CHORDS[selectedChordName]) {
                 renderFretboard(CHORDS[selectedChordName].positions);
             }
+            updateChordDisplay(data.chord, data.notes);
         }
     } catch (error) {
         console.error('Error fetching chord:', error);
