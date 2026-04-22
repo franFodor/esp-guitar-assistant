@@ -42,13 +42,9 @@ function updateTuningDisplay() {
     }
     
     // Display target frequencies for each string
-    let freqHtml = '<div class="text-center">';
-    tuning.forEach((note, index) => {
-        const freq = noteToFrequency(note);
-        freqHtml += '<strong>' + note + '</strong>: ' + freq.toFixed(2) + ' Hz';
-        if (index < tuning.length - 1) freqHtml += ' | ';
-    });
-    freqHtml += '</div>';
+    const freqHtml = '<div class="text-center">' +
+        tuning.map(note => '<strong>' + note + '</strong>').join(' | ') +
+        '</div>';
     document.getElementById('tuning-display').innerHTML = freqHtml;
 }
 
@@ -83,9 +79,7 @@ async function update() {
     if (j.frequency <= 0) return;
 
     document.getElementById("note").textContent = j.note;
-    document.getElementById("freq").textContent =
-        j.frequency.toFixed(2) + " Hz";
-    
+
     let tuneMessage = "";
     if (j.cents < -10) {
         tuneMessage = "Tune up";

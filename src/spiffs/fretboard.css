@@ -44,7 +44,7 @@
 .fret-circle {
     width: 30px;
     height: 30px;
-    background: var(--blue);
+    background: var(--bright-blue);
     border-radius: 50%;
     position: absolute;
     left: 50%;
@@ -55,11 +55,11 @@
     align-items: center;
     justify-content: center;
     line-height: 1;
-    color: var(--fg);
+    color: var(--bg);
     font-weight: bold;
-    font-size: 1.2rem;
+    font-size: 0.9rem;
     z-index: 2;
-    border: 2px solid var(--fg);
+    border: 2px solid var(--bg);
 }
 
 .fret-xo-circle {
@@ -69,15 +69,15 @@
 }
 
 .fret-circle-target {
-    background: var(--blue);
+    background: var(--bright-blue);
 }
 
 .fret-circle-correct {
-    background: var(--green) !important;
+    background: var(--bright-green) !important;
 }
 
 .fret-circle-incorrect {
-    background: var(--red) !important;
+    background: var(--bright-red) !important;
 }
 
 .fret-xo {
@@ -102,7 +102,7 @@
 .note-circle {
     width: 26px;
     height: 26px;
-    background: var(--green);
+    background: var(--bright-green);
     border-radius: 50%;
     position: absolute;
     left: 50%;
@@ -112,19 +112,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--fg);
+    color: var(--bg);
     font-weight: bold;
     font-size: 0.9rem;
     z-index: 1;
-    border: 2px solid var(--fg);
+    border: 2px solid var(--bg);
 }
 
 .note-circle-correct {
-    background: var(--green);
+    background: var(--bright-green);
 }
 
 .note-circle-incorrect {
-    background: var(--red);
+    background: var(--bright-red);
 }
 
 #fretboard-container {

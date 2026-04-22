@@ -14,6 +14,13 @@
     --purple: #b16286;
     --aqua: #689d6a;
     --orange: #d65d0e;
+    /* bright variants — used for fretboard highlights */
+    --bright-red: #fb4934;
+    --bright-green: #b8bb26;
+    --bright-yellow: #fabd2f;
+    --bright-blue: #83a598;
+    --bright-aqua: #8ec07c;
+    --bright-orange: #fe8019;
 }
 
 /* Gruvbox Light Color Scheme */
@@ -30,6 +37,12 @@ body.light-theme {
     --purple: #8f3f71;
     --aqua: #427b58;
     --orange: #af3a03;
+    --bright-red: #cc241d;
+    --bright-green: #98971a;
+    --bright-yellow: #d79921;
+    --bright-blue: #458588;
+    --bright-aqua: #689d6a;
+    --bright-orange: #d65d0e;
 }
 
 /* Theme toggle */
@@ -227,23 +240,20 @@ a:hover {
 }
 
 .scale-note.root {
-    background-color: var(--orange);
+    background-color: var(--bright-orange);
     color: var(--bg);
 }
 
 .scale-note.interval {
-    background-color: var(--blue);
-    color: var(--fg);
+    background-color: var(--bright-blue);
+    color: var(--bg);
 }
 
 .scale-root-circle {
-    background: var(--orange) !important;
+    background: var(--bright-orange) !important;
     color: var(--bg) !important;
 }
 
-.fret-circle.scale-note-circle {
-    font-size: 1rem;
-}
 
 .select-dark {
     background-color: var(--bg1);
@@ -260,20 +270,7 @@ a:hover {
     outline: none;
 }
 
-/* Light theme: fretboard circles have dark backgrounds so need light text */
-body.light-theme .fret-circle {
-    color: var(--bg);
-    border-color: var(--bg2);
-}
 
-body.light-theme .note-circle {
-    color: var(--bg);
-    border-color: var(--bg2);
-}
-
-body.light-theme .scale-note.interval {
-    color: var(--bg);
-}
 
 /* Mobile navbar */
 @media (max-width: 991.98px) {

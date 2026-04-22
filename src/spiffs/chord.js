@@ -34,20 +34,16 @@ function updateChordDisplay(chord, notes) {
         detectedChordName = chord;
         detectedNotes = notes || [];
         
-        // Show detected notes only when listening
         if (isListening && detectedNotesEl && notes && notes.length > 0) {
             detectedNotesEl.innerHTML = '<strong>Detected Notes:</strong> ' + notes.join(', ');
-            detectedNotesEl.style.display = 'block';
-        } else {
-            detectedNotesEl.style.display = 'none';
+        } else if (detectedNotesEl) {
+            detectedNotesEl.textContent = '-';
         }
     } else {
         chordNameEl.textContent = "--";
         detectedChordName = "None";
         detectedNotes = [];
-        if (detectedNotesEl) {
-            detectedNotesEl.style.display = 'none';
-        }
+        if (detectedNotesEl) detectedNotesEl.textContent = '-';
     }
     
     // Update chord color based on comparison
@@ -440,26 +436,15 @@ $(document).ready(function() {
             isListening = !isListening;
             if (isListening) {
                 listenBtn.classList.add('listening');
-                listenBtn.textContent = 'Stop';
-                // Update detected notes display when starting to listen
-                const detectedNotesEl = document.getElementById('detected-notes-display');
-                const chordNameEl = document.getElementById('chord-name');
-                if (detectedNotesEl && detectedNotes.length > 0) {
-                    detectedNotesEl.innerHTML = '<strong>Detected Notes:</strong> ' + detectedNotes.join(', ');
-                    detectedNotesEl.style.display = 'block';
-                }
-                if (chordNameEl && detectedChordName !== "None") {
-                    chordNameEl.textContent = detectedChordName;
-                    chordNameEl.classList.add('detected');
-                }
+                listenBtn.textContent = 'Stop Listening';
+                detectedChordName = "None"; // force next poll to re-render with isListening=true
             } else {
                 listenBtn.classList.remove('listening');
-                listenBtn.textContent = 'Listen';
-                // Reset detected chord when stopping
+                listenBtn.textContent = 'Start Listening';
                 detectedChordName = "None";
                 detectedNotes = [];
                 document.getElementById('chord-name').textContent = "--";
-                document.getElementById('detected-notes-display').style.display = 'none';
+                document.getElementById('detected-notes-display').textContent = '-';
             }
             highlightFretboard();
         });
