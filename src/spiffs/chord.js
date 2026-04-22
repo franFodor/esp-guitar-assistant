@@ -139,18 +139,11 @@ function highlightDetectedNotes(notes, isCorrect) {
         }
     }
     
-    // Highlight detected notes at fret positions 1-3 only (not including 4th fret)
+    // Highlight detected notes across all 5 visible frets
     let cellIndex = 0;
     for (let string = 5; string >= 0; string--) {
-        for (let fret = 0; fret < 12; fret++) {
+        for (let fret = 0; fret < 5; fret++) {
             const displayFret = fret + 1;
-            
-            // Only highlight up to 3rd fret (not including 4th)
-            if (displayFret >= 4) {
-                cellIndex++;
-                continue;
-            }
-            
             const noteAtPosition = getNoteAtFret(string, displayFret);
             
             if (notes.includes(noteAtPosition)) {
@@ -380,22 +373,21 @@ function renderFretboard(chordPositions = null) {
         }
         
         fretboard.appendChild(xoCell);
-        for (let fret = 0; fret < 12; fret++) {
+        for (let fret = 0; fret < 5; fret++) {
             const cell = document.createElement('div');
             cell.className = 'fret-cell';
+            cell.style.width = '100%';
 
-            if (string === 0) {
-                cell.classList.add('last-row');
-            }
+            if (string === 0) cell.classList.add('last-row');
 
-            if (string === 0 && (fret === 0 || fret == 2 || fret == 4 || fret == 6 || fret == 8 || fret === 11)) {
-                cell.innerHTML = `<span class='fret-label'>${fret+1}</span>`;
+            if (string === 0 && (fret === 2 || fret === 4)) {
+                cell.innerHTML = `<span class='fret-label'>${fret + 1}</span>`;
             }
 
             if (chordPositions) {
-                const pos = chordPositions[string][0];
+                const pos    = chordPositions[string][0];
                 const finger = chordPositions[string][1];
-                if (pos !== null && pos > 0 && pos-1 === fret) {
+                if (pos !== null && pos > 0 && pos - 1 === fret) {
                     const circle = document.createElement('div');
                     circle.className = 'fret-circle';
                     if (finger) circle.textContent = finger;
@@ -405,8 +397,11 @@ function renderFretboard(chordPositions = null) {
 
             fretboard.appendChild(cell);
         }
-        }
     }
+
+    fretboard.style.gridTemplateColumns = `32px repeat(5, 72px)`;
+    fretboard.style.minWidth = (32 + 5 * 72) + 'px';
+}
 
 
 $(document).ready(function() {

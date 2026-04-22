@@ -12,11 +12,16 @@ const SCALES = {
     "Mixolydian":       [0, 2, 4, 5, 7, 9, 10],
 };
 
-// MIDI for each open string: string 0 = low E2, string 5 = high E4
-const OPEN_MIDI = [40, 45, 50, 55, 59, 64];
+// MIDI for each open string: index 0 = low E2, index 5 = high E4
+const OPEN_MIDI   = [40, 45, 50, 55, 59, 64];
+const WINDOW_SIZE = 5;
+const MAX_FRET    = 15;                          // enough for all 5 pentatonic positions
+const MAX_START   = MAX_FRET - WINDOW_SIZE + 1; // = 11
 
 let selectedRoot     = "A";
 let selectedScale    = "Pentatonic Minor";
+let positions        = [];   // list of position start frets, computed from scale
+let positionIdx      = 0;    // which position we're currently showing
 let isListening      = false;
 let pollInterval     = null;
 let lastDetectedNote = null;
@@ -25,7 +30,6 @@ function getPitchClass(noteName) {
     return noteName.replace(/\d+$/, '');
 }
 
-// Returns full note name with octave, e.g. "A2", "D#3"
 function getNoteWithOctave(string, fret) {
     const midi = OPEN_MIDI[string] + fret;
     return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
@@ -36,8 +40,34 @@ function getScaleNotes() {
     return SCALES[selectedScale].map(i => NOTE_NAMES[(rootIdx + i) % 12]);
 }
 
+// Positions are determined by where each scale note first appears on the low E string.
+// This matches standard guitar pedagogy (e.g. A minor pentatonic → 5 box positions).
+function computePositions() {
+    const scaleNotes = getScaleNotes();
+    const lowEOpen   = OPEN_MIDI[0] % 12; // 4 = E
+
+    const frets = scaleNotes.map(note => {
+        const noteIdx = NOTE_NAMES.indexOf(note);
+        const fret    = (noteIdx - lowEOpen + 12) % 12;
+        return fret === 0 ? 1 : fret; // fret 0 = open string → show from fret 1
+    });
+
+    return [...new Set(frets)]
+        .sort((a, b) => a - b)
+        .filter(f => f <= MAX_START);
+}
+
+function updatePositionLabel() {
+    const start = positions[positionIdx] ?? 1;
+    const total = positions.length;
+    document.getElementById('position-label').textContent =
+        `Position ${positionIdx + 1} / ${total}  (frets ${start}–${start + WINDOW_SIZE - 1})`;
+    document.getElementById('btn-prev').disabled = positionIdx <= 0;
+    document.getElementById('btn-next').disabled = positionIdx >= positions.length - 1;
+}
+
 function renderScaleBadges() {
-    const notes = getScaleNotes();
+    const notes     = getScaleNotes();
     const container = document.getElementById('scale-notes-badges');
     container.innerHTML = '';
     notes.forEach((note, i) => {
@@ -50,48 +80,62 @@ function renderScaleBadges() {
 
 function renderFretboard() {
     const scaleNotes = getScaleNotes();
+    const start      = positions[positionIdx] ?? 1;
     const fretboard  = document.getElementById('fretboard');
     fretboard.innerHTML = '';
+
+    fretboard.style.gridTemplateColumns = `40px repeat(${WINDOW_SIZE}, 72px)`;
+    fretboard.style.minWidth = (40 + WINDOW_SIZE * 72) + 'px';
 
     for (let string = 5; string >= 0; string--) {
         const xoCell = document.createElement('div');
         xoCell.className = 'fret-xo';
 
-        // Open string (fret 0)
-        const openFull  = getNoteWithOctave(string, 0);
-        const openPitch = getPitchClass(openFull);
-        if (scaleNotes.includes(openPitch)) {
-            const circle = document.createElement('div');
-            circle.className = 'fret-circle fret-xo-circle scale-note-circle';
-            if (openPitch === selectedRoot) circle.classList.add('scale-root-circle');
-            circle.dataset.note = openFull;   // "A2" — used for octave-exact matching
-            circle.textContent  = openPitch;  // "A"  — display only pitch class
-            xoCell.appendChild(circle);
+        // Only show open-string notes when the window starts at fret 1
+        if (start === 1) {
+            const openFull  = getNoteWithOctave(string, 0);
+            const openPitch = getPitchClass(openFull);
+            if (scaleNotes.includes(openPitch)) {
+                const circle = document.createElement('div');
+                circle.className = 'fret-circle fret-xo-circle scale-note-circle';
+                if (openPitch === selectedRoot) circle.classList.add('scale-root-circle');
+                circle.dataset.note = openFull;
+                circle.textContent  = openPitch;
+                xoCell.appendChild(circle);
+            }
         }
         fretboard.appendChild(xoCell);
 
-        for (let fret = 0; fret < 12; fret++) {
+        for (let f = 0; f < WINDOW_SIZE; f++) {
+            const fret = start + f;
             const cell = document.createElement('div');
-            cell.className = 'fret-cell';
+            cell.className  = 'fret-cell';
+            cell.style.width = '100%';
             if (string === 0) cell.classList.add('last-row');
-            if (string === 0 && (fret === 0 || fret === 2 || fret === 4 || fret === 6 || fret === 8 || fret === 11)) {
-                cell.innerHTML = `<span class='fret-label'>${fret + 1}</span>`;
+            if (string === 0) {
+                // Show fret number at standard marker frets (3,5,7,9,12,15)
+                const markers = new Set([3, 5, 7, 9, 12, 15]);
+                if (markers.has(fret)) {
+                    cell.innerHTML = `<span class='fret-label'>${fret}</span>`;
+                }
             }
 
-            const noteFull  = getNoteWithOctave(string, fret + 1);
+            const noteFull  = getNoteWithOctave(string, fret);
             const notePitch = getPitchClass(noteFull);
             if (scaleNotes.includes(notePitch)) {
                 const circle = document.createElement('div');
                 circle.className = 'fret-circle scale-note-circle';
                 if (notePitch === selectedRoot) circle.classList.add('scale-root-circle');
-                circle.dataset.note = noteFull;   // "A3" — octave-exact
-                circle.textContent  = notePitch;  // "A"
+                circle.dataset.note = noteFull;
+                circle.textContent  = notePitch;
                 cell.appendChild(circle);
             }
 
             fretboard.appendChild(cell);
         }
     }
+
+    updatePositionLabel();
 }
 
 function highlightDetected(detectedNote) {
@@ -114,7 +158,6 @@ function highlightDetected(detectedNote) {
     display.style.color = inScale ? 'var(--green)' : 'var(--red)';
 
     if (inScale) {
-        // Match exact note+octave — only the fret positions for this specific A2/A3/etc. light up
         document.querySelectorAll(`.scale-note-circle[data-note="${detectedNote}"]`).forEach(el => {
             el.classList.add('fret-circle-correct');
         });
@@ -142,7 +185,7 @@ async function poll() {
 
 function toggleListening() {
     isListening = !isListening;
-    const btn = document.getElementById('listen-btn');
+    const btn   = document.getElementById('listen-btn');
 
     if (isListening) {
         btn.textContent = 'Stop Listening';
@@ -176,15 +219,23 @@ function populateDropdowns() {
     });
 
     rootDropdown.addEventListener('change', e => {
-        selectedRoot = e.target.value;
+        selectedRoot     = e.target.value;
         lastDetectedNote = null;
+        positions        = computePositions();
+        // Jump to the position closest to the root on the low E string
+        const lowEOpen   = OPEN_MIDI[0] % 12;
+        const rootFret   = (NOTE_NAMES.indexOf(selectedRoot) - lowEOpen + 12) % 12 || 1;
+        positionIdx      = positions.reduce((best, f, i) =>
+            Math.abs(f - rootFret) < Math.abs(positions[best] - rootFret) ? i : best, 0);
         renderScaleBadges();
         renderFretboard();
     });
 
     scaleDropdown.addEventListener('change', e => {
-        selectedScale = e.target.value;
+        selectedScale    = e.target.value;
         lastDetectedNote = null;
+        positions        = computePositions();
+        positionIdx      = Math.min(positionIdx, positions.length - 1);
         renderScaleBadges();
         renderFretboard();
     });
@@ -200,9 +251,23 @@ $(document).ready(function() {
             $('#nav-scale').addClass('active').append('<span class="sr-only">(current)</span>');
         });
 
+    positions   = computePositions();
+    // Start at the root position (position whose start fret == root on low E)
+    const lowEOpen = OPEN_MIDI[0] % 12;
+    const rootFret = (NOTE_NAMES.indexOf(selectedRoot) - lowEOpen + 12) % 12 || 1;
+    positionIdx    = positions.reduce((best, f, i) =>
+        Math.abs(f - rootFret) < Math.abs(positions[best] - rootFret) ? i : best, 0);
+
     populateDropdowns();
     renderScaleBadges();
     renderFretboard();
 
     document.getElementById('listen-btn').addEventListener('click', toggleListening);
+
+    document.getElementById('btn-prev').addEventListener('click', () => {
+        if (positionIdx > 0) { positionIdx--; lastDetectedNote = null; highlightDetected(null); renderFretboard(); }
+    });
+    document.getElementById('btn-next').addEventListener('click', () => {
+        if (positionIdx < positions.length - 1) { positionIdx++; lastDetectedNote = null; highlightDetected(null); renderFretboard(); }
+    });
 });
