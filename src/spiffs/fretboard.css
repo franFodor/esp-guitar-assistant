@@ -13,6 +13,7 @@
     min-height: 192px;
     position: relative;
     padding-top: 20px;
+    padding-right: 16px;
 }
 
 .fret-cell {
@@ -41,8 +42,8 @@
 }
 
 .fret-circle {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     background: var(--blue);
     border-radius: 50%;
     position: absolute;
@@ -53,6 +54,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
     color: var(--fg);
     font-weight: bold;
     font-size: 1.2rem;

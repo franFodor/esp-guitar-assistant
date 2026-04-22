@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
+
 /* Gruvbox Dark Color Scheme */
 :root {
     --bg: #282828;
@@ -14,8 +16,94 @@
     --orange: #d65d0e;
 }
 
+/* Gruvbox Light Color Scheme */
+body.light-theme {
+    --bg: #fbf1c7;
+    --bg1: #ebdbb2;
+    --bg2: #d5c4a1;
+    --fg: #3c3836;
+    --fg-gray: #7c6f64;
+    --red: #9d0006;
+    --green: #79740e;
+    --yellow: #b57614;
+    --blue: #076678;
+    --purple: #8f3f71;
+    --aqua: #427b58;
+    --orange: #af3a03;
+}
+
+/* Theme toggle */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    align-self: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding-right: 8px;
+    margin-left: auto;
+}
+
+.theme-toggle-label {
+    font-size: 1rem;
+    line-height: 1;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    color: var(--fg-gray);
+    user-select: none;
+}
+
+.theme-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    margin: 0;
+}
+
+.theme-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+}
+
+.theme-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: var(--bg2);
+    border: 1px solid var(--fg-gray);
+    border-radius: 20px;
+    transition: background-color 0.2s;
+}
+
+.theme-slider::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: var(--fg-gray);
+    border-radius: 50%;
+    transition: transform 0.2s, background-color 0.2s;
+}
+
+.theme-switch input:checked + .theme-slider {
+    background-color: var(--yellow);
+    border-color: var(--yellow);
+}
+
+.theme-switch input:checked + .theme-slider::before {
+    transform: translate(16px, -50%);
+    background-color: var(--bg);
+}
+
 body {
-    font-family: sans-serif;
+    font-family: 'Outfit', sans-serif;
     text-align: center;
     background-color: var(--bg);
     color: var(--fg);
@@ -31,8 +119,25 @@ body {
     color: var(--fg) !important;
 }
 
+.nav-link {
+    margin: 0 4px;
+    padding: 6px 18px !important;
+    border-radius: 6px;
+    border: 1px solid var(--bg2);
+    background-color: var(--bg2);
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
 .nav-link:hover {
-    color: var(--yellow) !important;
+    color: var(--bg) !important;
+    background-color: var(--yellow) !important;
+    border-color: var(--yellow) !important;
+}
+
+.nav-link.active {
+    color: var(--bg) !important;
+    background-color: var(--orange) !important;
+    border-color: var(--orange) !important;
 }
 
 .navbar-toggler-icon {
@@ -137,8 +242,7 @@ a:hover {
 }
 
 .fret-circle.scale-note-circle {
-    font-size: 0.7rem;
-    font-weight: bold;
+    font-size: 1rem;
 }
 
 .select-dark {
@@ -154,4 +258,30 @@ a:hover {
 .select-dark:focus {
     border-color: var(--yellow);
     outline: none;
+}
+
+/* Light theme: fretboard circles have dark backgrounds so need light text */
+body.light-theme .fret-circle {
+    color: var(--bg);
+    border-color: var(--bg2);
+}
+
+body.light-theme .note-circle {
+    color: var(--bg);
+    border-color: var(--bg2);
+}
+
+body.light-theme .scale-note.interval {
+    color: var(--bg);
+}
+
+/* Mobile navbar */
+@media (max-width: 991.98px) {
+    .navbar-toggler  { order: 1; }
+    .theme-toggle    { order: 2; }
+    .navbar-collapse { order: 3; }
+
+    .navbar-collapse .nav-link {
+        margin: 4px 8px;
+    }
 }

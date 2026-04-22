@@ -84,8 +84,8 @@ function renderFretboard() {
     const fretboard  = document.getElementById('fretboard');
     fretboard.innerHTML = '';
 
-    fretboard.style.gridTemplateColumns = `40px repeat(${WINDOW_SIZE}, 72px)`;
-    fretboard.style.minWidth = (40 + WINDOW_SIZE * 72) + 'px';
+    fretboard.style.gridTemplateColumns = `32px repeat(${WINDOW_SIZE}, 72px)`;
+    fretboard.style.minWidth = (32 + WINDOW_SIZE * 72) + 'px';
 
     for (let string = 5; string >= 0; string--) {
         const xoCell = document.createElement('div');
