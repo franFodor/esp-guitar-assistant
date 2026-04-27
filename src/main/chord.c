@@ -13,10 +13,6 @@ static float pitch_class_accumulator[NUM_PITCH_CLASSES] = {0};
 static int frame_count = 0;
 
 
-/**
- * Convert frequency to pitch class (0-11)
- * Based on MIDI note number formula
- */
 static int freq_to_pitch_class(float freq) {
     // MIDI note number: 69 + 12 * log2(freq / 440)
     float midi = 69.0f + 12.0f * log2f(freq / 440.0f);
@@ -30,18 +26,12 @@ static int freq_to_pitch_class(float freq) {
     return pitch_class;
 }
 
-/**
- * Roll the chord template to match a different root note
- */
 static void roll_template(const float* template, int shift, float* output) {
     for (int i = 0; i < NUM_PITCH_CLASSES; i++) {
         output[(i + shift) % NUM_PITCH_CLASSES] = template[i];
     }
 }
 
-/**
- * Dot product of two pitch class vectors
- */
 static float dot_product(const float* a, const float* b) {
     float sum = 0.0f;
     for (int i = 0; i < NUM_PITCH_CLASSES; i++) {
@@ -50,9 +40,6 @@ static float dot_product(const float* a, const float* b) {
     return sum;
 }
 
-/**
- * Find maximum value in array
- */
 static float find_max(const float* arr, int size) {
     float max_val = arr[0];
     for (int i = 1; i < size; i++) {

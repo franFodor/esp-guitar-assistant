@@ -1,63 +1,114 @@
 #ifndef CHORD_H
 #define CHORD_H
 
+/**
+ * @file chord.h
+ * @brief Polyphonic chord detection via pitch-class energy accumulation.
+ *
+ * Accumulates pitch-class energy over FRAMES_TO_ACCUMULATE consecutive FFT
+ * frames, normalises the resulting chroma vector, and matches it against
+ * shifted major and minor chord templates using a dot-product score.
+ * A match is accepted when the best score exceeds CHORD_THRESHOLD.
+ */
+
 #include <stdint.h>
 
+/** FFT size used by the chord detector (independent of the note FFT size). */
 #define CHORD_FFT_SIZE        2048
+
+/** Sample rate assumed when mapping FFT bins to frequencies, in Hz. */
 #define CHORD_SAMPLE_RATE     16000
+
+/** Lower frequency bound for pitch-class accumulation, in Hz. */
 #define CHORD_MIN_FREQ        70.0f
+
+/** Upper frequency bound for pitch-class accumulation, in Hz. */
 #define CHORD_MAX_FREQ        1500.0f
 
+/** Number of pitch classes in one octave (chromatic scale). */
 #define NUM_PITCH_CLASSES     12
+
+/** Number of FFT frames accumulated before attempting a chord match. */
 #define FRAMES_TO_ACCUMULATE  5
+
+/**
+ * @brief Minimum dot-product score required to accept a chord match.
+ *
+ * Range 0–3 (sum of three template weights).  Lower values increase
+ * sensitivity but also false-positive rate.
+ */
 #define CHORD_THRESHOLD       0.4f
 
-// Audio level threshold for chord detection (RMS)
-// Adjust this value based on your microphone sensitivity
-// Typical values: 0.01 (sensitive) to 0.1 (requires loud strumming)
+/**
+ * @brief RMS amplitude threshold below which chord detection is skipped.
+ *
+ * Adjust based on microphone gain.  Typical range: 0.01 (sensitive) to
+ * 0.1 (requires loud strumming).
+ */
 #define CHORD_AMPLITUDE_THRESHOLD  0.002f
 
-static const char* NOTE_NAMES[NUM_PITCH_CLASSES] = {
+/** Maximum number of individual notes stored in a chord_result_t. */
+#define MAX_CHORD_NOTES 4
+
+/** Chromatic note names indexed by pitch class (0 = C). */
+static const char *NOTE_NAMES[NUM_PITCH_CLASSES] = {
     "C", "C#", "D", "D#", "E", "F",
     "F#", "G", "G#", "A", "A#", "B"
 };
 
-// index 0 - root, index 4 - major third, index 7 - perfect fifth
+/**
+ * @brief Major chord template (root, major third, perfect fifth).
+ *
+ * Indices represent semitones above the root; non-zero entries are chord tones.
+ */
 static const float MAJOR_TEMPLATE[NUM_PITCH_CLASSES] = {
     1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
     0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
-// index 0 - root, index 3 - minor third, index 7 - perfect fifth
+/**
+ * @brief Minor chord template (root, minor third, perfect fifth).
+ *
+ * Indices represent semitones above the root; non-zero entries are chord tones.
+ */
 static const float MINOR_TEMPLATE[NUM_PITCH_CLASSES] = {
     1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
     0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
-#define MAX_CHORD_NOTES 4
-
 /**
- * Chord detection result
+ * @brief Result produced by chord_detect().
  */
 typedef struct {
-    char name[32];      // Chord name (e.g., "C major", "D# minor")
-    int valid;          // 1 if valid chord detected, 0 otherwise
-    float amplitude;    // Detected audio amplitude (RMS)
-    char notes[MAX_CHORD_NOTES][8];  // Individual notes (e.g., "C", "E", "G")
-    int note_count;     // Number of notes in the chord
+    char  name[32];                  /**< Chord name, e.g. "C major" or "D# minor". */
+    int   valid;                     /**< 1 if a chord was recognised, 0 otherwise. */
+    float amplitude;                 /**< Input signal RMS amplitude. */
+    char  notes[MAX_CHORD_NOTES][8]; /**< Constituent note names, e.g. "C", "E", "G". */
+    int   note_count;                /**< Number of valid entries in @c notes. */
 } chord_result_t;
 
 /**
- * Initialize the chord detection module
+ * @brief Initialise the chord-detection module.
+ *
+ * Resets the frame accumulator and frame counter.  Must be called once
+ * before the first call to chord_detect().
  */
 void chord_init(void);
 
 /**
- * Perform chord detection on magnitude spectrum
- * @param magnitudes Magnitude spectrum array (CHORD_FFT_SIZE/2 elements)
- * @param audio_samples Raw audio samples for amplitude calculation
- * @param result Output chord detection result
+ * @brief Detect a chord from one FFT magnitude frame.
+ *
+ * Accumulates pitch-class energy from @p magnitudes into an internal buffer.
+ * Once FRAMES_TO_ACCUMULATE frames have been collected the chroma vector is
+ * normalised, matched against all 24 major/minor templates, and written to
+ * @p result if the best score exceeds CHORD_THRESHOLD.  The accumulator is
+ * reset after each match attempt regardless of outcome.
+ *
+ * @param magnitudes    Half-spectrum magnitude array (CHORD_FFT_SIZE/2 elements).
+ * @param audio_samples Raw float audio samples used for amplitude calculation.
+ * @param result        Output structure; @c result->valid is 0 if no chord
+ *                      was recognised this call.
  */
-void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* result);
+void chord_detect(float *magnitudes, float *audio_samples, chord_result_t *result);
 
 #endif // CHORD_H
