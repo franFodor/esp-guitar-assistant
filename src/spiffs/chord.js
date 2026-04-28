@@ -3,6 +3,24 @@ let selectedChordName = "A major"; // User's selected chord to practice
 let detectedChordName = "None"; // Chord detected by API
 let detectedNotes = [];
 let isListening = false; // Whether user has pressed Listen button
+let wasCorrect = false;
+let audioCtx = null;
+
+function playDing() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const t = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.4, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.start(t);
+    osc.stop(t + 0.35);
+}
 
 // Note positions on fretboard for standard tuning
 function getNoteAtFret(string, fret) {
@@ -23,10 +41,14 @@ function updateChordDisplay(chord, notes) {
     
     if (chord && chord !== "None") {
         chordNameEl.textContent = chord;
-        
+
         // Store detected chord info
         detectedChordName = chord;
         detectedNotes = notes || [];
+
+        const isCorrect = (chord === selectedChordName);
+        if (isCorrect && !wasCorrect) playDing();
+        wasCorrect = isCorrect;
         
         if (isListening && detectedNotesEl && notes && notes.length > 0) {
             detectedNotesEl.innerHTML = '<strong>Detected Notes:</strong> ' + notes.join(', ');
@@ -169,6 +191,7 @@ function highlightDetectedNotes(notes, isCorrect) {
 }
 
 async function fetchChord() {
+    if (!isListening) return;
     try {
         let data;
         if (TEST_MODE) {
@@ -362,6 +385,7 @@ $(document).ready(function() {
                 listenBtn.textContent = 'Start Listening';
                 detectedChordName = "None";
                 detectedNotes = [];
+                wasCorrect = false;
                 document.getElementById('chord-name').textContent = "--";
                 document.getElementById('detected-notes-display').textContent = '-';
             }

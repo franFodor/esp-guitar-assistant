@@ -1,0 +1,89 @@
+.beat-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    min-height: 48px;
+}
+
+.beat-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--bg2);
+    border: 2px solid var(--fg-gray);
+    transition: background 0.04s, border-color 0.04s;
+}
+
+.beat-dot.accent {
+    width: 30px;
+    height: 30px;
+    border-color: var(--yellow);
+}
+
+.beat-dot.active {
+    background: var(--bright-yellow);
+    border-color: var(--bright-yellow);
+}
+
+.beat-dot.accent.active {
+    background: var(--bright-orange);
+    border-color: var(--bright-orange);
+}
+
+.bpm-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.bpm-display {
+    font-size: 4.5rem;
+    font-weight: 700;
+    color: var(--fg);
+    min-width: 120px;
+    text-align: center;
+    line-height: 1;
+}
+
+.bpm-btn {
+    font-size: 1.5rem;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    line-height: 1;
+}
+
+.bpm-slider {
+    width: 100%;
+    accent-color: var(--yellow);
+    cursor: pointer;
+}
+
+#start-btn {
+    background-color: var(--bg2) !important;
+    border: 2px solid var(--fg-gray) !important;
+    color: var(--fg) !important;
+    font-size: 1.1rem;
+    padding: 10px 40px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+#start-btn:hover {
+    background-color: var(--fg-gray) !important;
+    color: var(--bg) !important;
+    border-color: var(--yellow) !important;
+}
+
+#start-btn.listening {
+    background-color: var(--green) !important;
+    border-color: var(--green) !important;
+    color: var(--bg) !important;
+}
+
+#start-btn.listening:hover {
+    background-color: var(--red) !important;
+    border-color: var(--red) !important;
+}

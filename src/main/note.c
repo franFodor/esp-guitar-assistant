@@ -19,16 +19,16 @@ static note_t chromatic_scale[] = {
 // Persistence state: a note must be detected this many consecutive frames before publishing
 #define NOTE_STABILITY_FRAMES 3
 
-static float last_freq = 0.0f;
-static int   no_detection_count = 0;
-static char  pending_note[8] = "";
-static int   pending_count = 0;
+static char pending_note[8] = "";
+static int  pending_count = 0;
 
 static float quadratic_interpolation(float* magnitudes, int peak_bin) {
     if (peak_bin <= 0 || peak_bin >= (FFT_SIZE/2 - 1))
         return (float)peak_bin * SAMPLE_RATE / FFT_SIZE;
 
-    // Fit a parabola to the three bins around the peak to get sub-bin frequency resolution
+    // Fit a parabola to the three bins around the peak to get sub-bin frequency resolution.
+    // At 16 kHz / 4096 points each bin is ~3.9 Hz wide — without interpolation that would be
+    // the worst-case pitch error, which is audible (a semitone at E2 is only ~4 Hz wide).
     float gamma = magnitudes[peak_bin - 1];
     float beta  = magnitudes[peak_bin];
     float alpha = magnitudes[peak_bin + 1];
@@ -45,8 +45,12 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
     float freq_res = (float)SAMPLE_RATE / FFT_SIZE;
     const int R = 4;
 
-    // Multiply downsampled copies of the spectrum together (R harmonics)
-    // Each harmonic reinforces bins where a true fundamental is present
+    // Multiply downsampled copies of the spectrum together (R harmonics).
+    // Each harmonic reinforces bins where a true fundamental is present:
+    // if bin k is the fundamental, bins 2k, 3k … Rk also have energy, so
+    // only the true fundamental survives all R multiplications at full strength.
+    // R=4 means we check up to the 4th harmonic (enough for guitar without
+    // pulling in unrelated pitches from neighbouring strings).
     for (int i = 0; i < half_size; i++) hps[i] = 1.0f;
     for (int r = 1; r <= R; r++) {
         int limit = half_size / r;
@@ -54,7 +58,8 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
         for (int i = limit; i < half_size; i++) hps[i] = 0.0f;
     }
 
-    // Search for the strongest peak within the guitar frequency range
+    // Search for the strongest peak within the guitar frequency range (70–1200 Hz
+    // covers E2 on the low string up through the high frets of the top string).
     int min_bin = (int)floorf(70.0f / freq_res);
     int max_bin = (int)ceilf(1200.0f / freq_res);
     if (min_bin < 1) min_bin = 1;
@@ -91,50 +96,38 @@ const char* note_find_closest(float frequency, float* cents_offset) {
 
 void note_frequency_analysis(float* magnitudes, float* hps) {
     // Compress the dynamic range of the magnitude spectrum before HPS so that
-    // quieter harmonics still contribute without being drowned out by loud ones
+    // quieter harmonics still contribute without being drowned out by loud ones.
+    // Exponent 0.65 was chosen empirically: lower values over-boost noise,
+    // higher values underweight weak harmonics and hurt HPS accuracy.
     for (int i = 1; i < FFT_SIZE/2; i++)
         magnitudes[i] = powf(magnitudes[i] + 1e-20f, 0.65f);
 
     float freq = harmonic_product_spectrum(magnitudes, FFT_SIZE/2, hps);
 
-    if (freq > 0.0f) {
-        last_freq = freq;
-        no_detection_count = 0;
+    float cents;
+    const char* note = note_find_closest(freq, &cents);
+    // cents = 1200 * log2(f / f_reference) — positive means sharp, negative means flat.
 
-        float cents;
-        const char* note = note_find_closest(freq, &cents);
-
-        // Require the same note for NOTE_STABILITY_FRAMES consecutive frames
-        // before publishing to avoid flickering on transients
-        if (strcmp(note, pending_note) == 0) {
-            if (pending_count < NOTE_STABILITY_FRAMES)
-                pending_count++;
-        } else {
-            strncpy(pending_note, note, sizeof(pending_note) - 1);
-            pending_note[sizeof(pending_note) - 1] = '\0';
-            pending_count = 1;
-        }
-
-        // Once stable, keep publishing every frame so freq/cents stay live
-        if (pending_count >= NOTE_STABILITY_FRAMES) {
-            web_server_update_note(note, freq, cents);
-            ESP_LOGI("note", "NOTE: %s  %.2f Hz cent: %.2f", note, freq, cents);
-        }
+    // Require the same note for NOTE_STABILITY_FRAMES consecutive frames
+    // before publishing to avoid flickering on transients. A pluck attack
+    // often reads a slightly wrong pitch for one or two hops before settling.
+    if (strcmp(note, pending_note) == 0) {
+        if (pending_count < NOTE_STABILITY_FRAMES)
+            pending_count++;
     } else {
-        // After 20 silent frames clear state to avoid stale note display
-        no_detection_count++;
-        if (no_detection_count > 20) {
-            last_freq = 0.0f;
-            pending_count = 0;
-            pending_note[0] = '\0';
-            no_detection_count = 0;
-        }
+        strncpy(pending_note, note, sizeof(pending_note) - 1);
+        pending_note[sizeof(pending_note) - 1] = '\0';
+        pending_count = 1;
+    }
+
+    // Once stable, keep publishing every frame so freq/cents stay live
+    if (pending_count >= NOTE_STABILITY_FRAMES) {
+        web_server_update_note(note, freq, cents);
+        ESP_LOGI("note", "NOTE: %s  %.2f Hz cent: %.2f", note, freq, cents);
     }
 }
 
 void note_init(void) {
-    last_freq = 0.0f;
-    no_detection_count = 0;
     pending_count = 0;
     pending_note[0] = '\0';
 }

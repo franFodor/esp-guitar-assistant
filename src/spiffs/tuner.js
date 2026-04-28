@@ -17,6 +17,24 @@ const SILENCE_TIMEOUT_MS = 5000;
 
 let tuneStringIdx = -1;
 let tuneStart = null;
+let tunedStrings = new Set();
+let audioCtx = null;
+
+function playDing() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const t = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.4, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.start(t);
+    osc.stop(t + 0.35);
+}
 
 const TEST_MODE = true; // Set to false to use real ESP data
 
@@ -49,6 +67,7 @@ function resetStringIndicators() {
     });
     tuneStringIdx = -1;
     tuneStart = null;
+    tunedStrings.clear();
 }
 
 function selectTuning(tuningName) {
@@ -139,11 +158,16 @@ async function update() {
                     tuneStart = Date.now();
                 }
                 if (Date.now() - tuneStart >= 1000) {
+                    if (!tunedStrings.has(idx)) {
+                        tunedStrings.add(idx);
+                        playDing();
+                    }
                     el.className = 'string-indicator tuned';
                 }
             } else {
                 tuneStringIdx = -1;
                 tuneStart = null;
+                tunedStrings.delete(idx);
                 if (!el.classList.contains('tuned')) {
                     el.className = 'string-indicator out-of-tune';
                 }

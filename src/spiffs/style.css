@@ -144,6 +144,10 @@ body {
     color: var(--fg);
 }
 
+h2 {
+    font-weight: 700;
+}
+
 /* Navbar styling */
 .navbar {
     background-color: var(--bg1) !important;

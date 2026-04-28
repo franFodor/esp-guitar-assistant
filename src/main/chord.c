@@ -54,7 +54,9 @@ void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* resul
     result->valid = 0;
     result->name[0] = '\0';
 
-    // Map each FFT bin in the guitar range to its pitch class and sum the magnitude
+    // Map each FFT bin in the guitar range to its pitch class and sum the magnitude.
+    // Pitch class collapses octave information: C2, C3, and C4 all map to class 0,
+    // which is exactly what we want — chord identity is octave-independent.
     float pitch_energy[NUM_PITCH_CLASSES] = {0};
     int half_size = CHORD_FFT_SIZE / 2;
     float freq_resolution = (float)CHORD_SAMPLE_RATE / CHORD_FFT_SIZE;
@@ -65,7 +67,9 @@ void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* resul
         pitch_energy[freq_to_pitch_class(freq)] += magnitudes[k];
     }
 
-    // Accumulate across frames for a more stable chroma vector
+    // Accumulate across frames for a more stable chroma vector. A single FFT frame
+    // can be dominated by the attack transient of one string, so averaging over
+    // FRAMES_TO_ACCUMULATE hops gives the sustained harmonic content time to settle.
     for (int i = 0; i < NUM_PITCH_CLASSES; i++)
         pitch_class_accumulator[i] += pitch_energy[i];
     frame_count++;
@@ -97,7 +101,9 @@ void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* resul
              NOTE_NAMES[sorted_indices[1]],
              NOTE_NAMES[sorted_indices[2]]);
 
-    // Score all 24 major/minor chords via dot product against circularly shifted templates
+    // Score all 24 major/minor chords via dot product against circularly shifted templates.
+    // Rolling the template by `root` semitones is equivalent to testing the chord rooted
+    // at that pitch class — one rotation covers all 12 keys for each quality.
     float best_score = 0.0f;
     int best_root = 0;
     int is_major = 1;

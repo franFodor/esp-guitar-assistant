@@ -95,7 +95,9 @@ static void audio_processor_task(void *pvParameters) {
 
         int n = (int)audio_buf.sample_count; // == HOP_SIZE
 
-        // Slide the ring buffer left by one hop and append the new samples at the end
+        // Slide the ring buffer left by one hop and append the new samples at the end.
+    // HOP_SIZE=512 with FFT_SIZE=4096 gives 8x overlap, so each new FFT reuses
+    // 87.5% of the previous window — this improves temporal resolution significantly.
         memmove(ring_buffer, ring_buffer + n, (FFT_SIZE - n) * sizeof(float));
         for (int i = 0; i < n; i++) {
             ring_buffer[FFT_SIZE - n + i] =
@@ -111,7 +113,10 @@ static void audio_processor_task(void *pvParameters) {
         rms = sqrtf(rms / n);
         if (rms < SILENCE_THRESHOLD) continue;
 
-        // Apply Hann window, then run FFT and compute magnitude spectrum
+        // Apply Hann window, then run FFT and compute magnitude spectrum.
+        // dsps_fft2r_fc32 requires interleaved real/imag input; imaginary parts are 0.
+        // dsps_cplx2reC_fc32 rearranges the output so bins 0..N/2-1 hold the
+        // positive-frequency half-spectrum (negative frequencies are mirror images).
         for (int i = 0; i < FFT_SIZE; i++) {
             fft_buffer[2 * i]     = ring_buffer[i] * hann_window[i];
             fft_buffer[2 * i + 1] = 0.0f;
@@ -151,6 +156,7 @@ static void setup_i2s(void) {
 
     i2s_std_config_t std_cfg = {
         .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
+        // MSB-justified 32-bit slot matches the INMP441 microphone's output format.
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_MONO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,

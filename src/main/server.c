@@ -105,7 +105,9 @@ detection_mode_t web_server_get_mode(void) {
 void web_server_update_note(const char *note, float frequency, float cents) {
     if (!note_mutex) return;
 
-    // Update state and rebuild the cached JSON string under the mutex
+    // Update state and rebuild the cached JSON string under the mutex.
+    // Pre-building the response string here (instead of in the HTTP handler)
+    // keeps the handler lock-free and fast — it just sends the cached string.
     xSemaphoreTake(note_mutex, portMAX_DELAY);
     strncpy(current_note, note, sizeof(current_note) - 1);
     current_note[sizeof(current_note) - 1] = 0;
@@ -154,7 +156,9 @@ void web_server_start(void) {
     chord_mutex = xSemaphoreCreateMutex();
 
     // Start the HTTP server with wildcard URI matching so the file handler
-    // catches any path that the more specific API handlers don't claim first
+    // catches any path that the more specific API handlers don't claim first.
+    // esp_http_server matches in registration order, so API handlers must be
+    // registered before the "/*" wildcard handler below.
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
 
