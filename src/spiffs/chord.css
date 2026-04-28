@@ -21,34 +21,6 @@
     color: var(--red);
 }
 
-/* Chord dropdown style (match tuner) */
-#chord-dropdown {
-    background-color: var(--bg1) !important;
-    color: var(--fg) !important;
-    border: 1px solid var(--bg2) !important;
-    font-size: 1.2rem;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    width: auto;
-    min-width: 180px;
-    max-width: 240px;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-#chord-dropdown option {
-    text-align: center;
-}
-
-#chord-dropdown:focus {
-    border-color: var(--yellow) !important;
-    outline: none;
-}
-
 /* Chord image box */
 #chord-img-box {
     background: var(--bg1);

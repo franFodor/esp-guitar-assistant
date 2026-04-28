@@ -23,7 +23,6 @@
 #include "esp_http_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "freertos/task.h"
 
 /** SSID broadcast by the ESP32 soft access point. */
 #define WIFI_AP_SSID      "ESP_GUITAR_TUNER"
@@ -55,8 +54,6 @@ void wifi_ap_start(void);
 /**
  * @brief Create HTTP server mutexes/semaphores and register all URI handlers.
  *
- * Call web_server_set_processor_task() after creating the audio processor
- * task so that API requests can wake it.
  */
 void web_server_start(void);
 
@@ -93,24 +90,5 @@ void web_server_update_note(const char *note, float frequency, float cents);
  * @param note_count  Number of valid entries in @p notes (0–MAX_CHORD_NOTES).
  */
 void web_server_update_chord(const char *chord, const char notes[][8], int note_count);
-
-/**
- * @brief Register the audio processor task for demand-driven wakeup.
- *
- * Must be called once after xTaskCreate() returns the processor task handle,
- * before the first API request is served.
- *
- * @param handle  FreeRTOS handle of the audio processor task.
- */
-void web_server_set_processor_task(TaskHandle_t handle);
-
-/**
- * @brief Signal that the current processing frame is complete.
- *
- * Called by the audio processor task after writing the result with
- * web_server_update_note() or web_server_update_chord().  Releases the
- * binary semaphore the waiting API handler is blocked on.
- */
-void web_server_signal_result_ready(void);
 
 #endif // SERVER_H

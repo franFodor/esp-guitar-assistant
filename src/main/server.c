@@ -20,10 +20,6 @@ static int current_note_count = 0;
 static SemaphoreHandle_t chord_mutex;
 static char cached_chord_response[256] = "{\"chord\":\"None\",\"notes\":[]}";
 
-// On-demand processing
-static TaskHandle_t      processor_task_handle = NULL;
-static SemaphoreHandle_t result_ready_sem      = NULL;
-static SemaphoreHandle_t request_mutex         = NULL;
 
 static const char *TAG = "wifi_ap";
 
@@ -68,26 +64,14 @@ static esp_err_t file_get_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_note_handler(httpd_req_t *req) {
-    xSemaphoreTake(request_mutex, portMAX_DELAY);
-    xTaskNotifyGive(processor_task_handle);
-    bool ok = xSemaphoreTake(result_ready_sem, pdMS_TO_TICKS(2000)) == pdTRUE;
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req,
-        ok ? cached_note_response : "{\"note\":\"None\",\"frequency\":0.0,\"cents\":0.0}",
-        HTTPD_RESP_USE_STRLEN);
-    xSemaphoreGive(request_mutex);
+    httpd_resp_send(req, cached_note_response, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
 static esp_err_t api_chord_handler(httpd_req_t *req) {
-    xSemaphoreTake(request_mutex, portMAX_DELAY);
-    xTaskNotifyGive(processor_task_handle);
-    bool ok = xSemaphoreTake(result_ready_sem, pdMS_TO_TICKS(2000)) == pdTRUE;
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req,
-        ok ? cached_chord_response : "{\"chord\":\"None\",\"notes\":[]}",
-        HTTPD_RESP_USE_STRLEN);
-    xSemaphoreGive(request_mutex);
+    httpd_resp_send(req, cached_chord_response, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -117,13 +101,6 @@ detection_mode_t web_server_get_mode(void) {
     return current_mode;
 }
 
-void web_server_set_processor_task(TaskHandle_t handle) {
-    processor_task_handle = handle;
-}
-
-void web_server_signal_result_ready(void) {
-    if (result_ready_sem) xSemaphoreGive(result_ready_sem);
-}
 
 void web_server_update_note(const char *note, float frequency, float cents) {
     if (!note_mutex) return;
@@ -173,10 +150,8 @@ void web_server_update_chord(const char *chord, const char notes[][8], int note_
 }
 
 void web_server_start(void) {
-    note_mutex      = xSemaphoreCreateMutex();
-    chord_mutex     = xSemaphoreCreateMutex();
-    result_ready_sem = xSemaphoreCreateBinary();
-    request_mutex   = xSemaphoreCreateMutex();
+    note_mutex  = xSemaphoreCreateMutex();
+    chord_mutex = xSemaphoreCreateMutex();
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;

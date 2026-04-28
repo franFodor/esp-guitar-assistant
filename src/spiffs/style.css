@@ -1,4 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('outfit-400.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('outfit-600.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('outfit-700.ttf') format('truetype');
+}
 
 /* Gruvbox Dark Color Scheme */
 :root {
@@ -142,9 +164,6 @@ body {
 
 .nav-link {
     color: var(--fg) !important;
-}
-
-.nav-link {
     margin: 0 4px;
     padding: 6px 18px !important;
     border-radius: 6px;
@@ -273,18 +292,33 @@ a:hover {
     background-color: var(--bg1);
     color: var(--fg);
     border: 1px solid var(--bg2);
-    font-size: 1.1rem;
-    padding: 0.4rem 0.8rem;
+    font-size: 1.2rem;
+    padding: 0.5rem 2.5rem 0.5rem 1rem;
     border-radius: 8px;
-    min-width: 140px;
+    min-width: 180px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23a89984' stroke-width='2' d='M2 5l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.select-dark:hover {
+    border-color: var(--fg-gray);
 }
 
 .select-dark:focus {
     border-color: var(--yellow);
     outline: none;
+    box-shadow: 0 0 0 2px rgba(215, 153, 33, 0.25);
 }
 
-
+body.light-theme .select-dark {
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%237c6f64' stroke-width='2' d='M2 5l6 6 6-6'/%3E%3C/svg%3E");
+}
 
 /* Mobile navbar */
 @media (max-width: 991.98px) {

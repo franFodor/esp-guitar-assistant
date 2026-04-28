@@ -1,48 +1,9 @@
 /* Tuner-specific styles */
 
-#tuning-dropdown {
-    background-color: var(--bg1) !important;
-    color: var(--fg) !important;
-    border: 4px solid var(--bg2) !important;
-    font-size: 1.2rem;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    width: auto;
-    min-width: 180px;
-    max-width: 240px;
-    text-align: center;
-    background: var(--bg1);
-    position: relative;
-}
-
-#tuning-dropdown::-ms-expand {
-    display: none;
-}
-
-/* Custom arrow */
-#tuning-dropdown {
-    background-position: right 1rem center;
-    background-size: 1.2em;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-#tuning-dropdown option {
-    text-align: center;
-}
-
 #tuning-dropdown option.separator {
     color: var(--fg-gray) !important;
     background: var(--bg2) !important;
     font-size: 0.9rem;
-    text-align: center;
-}
-
-#tuning-dropdown:focus {
-    border-color: var(--yellow) !important;
-    outline: none;
 }
 
 /* Meter styling */
