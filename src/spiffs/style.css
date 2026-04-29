@@ -324,6 +324,35 @@ body.light-theme .select-dark {
     background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%237c6f64' stroke-width='2' d='M2 5l6 6 6-6'/%3E%3C/svg%3E");
 }
 
+.btn-chevron {
+    background-color: var(--bg1);
+    color: var(--fg-gray);
+    border: 1px solid var(--bg2);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-chevron:hover:not(:disabled) {
+    border-color: var(--fg-gray);
+    color: var(--fg);
+}
+
+.btn-chevron:focus {
+    border-color: var(--yellow);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(215, 153, 33, 0.25);
+}
+
+.btn-chevron:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 /* Mobile navbar */
 @media (max-width: 991.98px) {
     .navbar-toggler  { order: 1; width: 72px; }
