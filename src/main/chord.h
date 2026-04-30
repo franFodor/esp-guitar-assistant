@@ -77,17 +77,6 @@ static const float MINOR_TEMPLATE[NUM_PITCH_CLASSES] = {
 };
 
 /**
- * @brief Result produced by chord_detect().
- */
-typedef struct {
-    char  name[32];                  /**< Chord name, e.g. "C major" or "D# minor". */
-    int   valid;                     /**< 1 if a chord was recognised, 0 otherwise. */
-    float amplitude;                 /**< Input signal RMS amplitude. */
-    char  notes[MAX_CHORD_NOTES][8]; /**< Constituent note names, e.g. "C", "E", "G". */
-    int   note_count;                /**< Number of valid entries in @c notes. */
-} chord_result_t;
-
-/**
  * @brief Initialise the chord-detection module.
  *
  * Resets the frame accumulator and frame counter.  Must be called once
@@ -100,15 +89,13 @@ void chord_init(void);
  *
  * Accumulates pitch-class energy from @p magnitudes into an internal buffer.
  * Once FRAMES_TO_ACCUMULATE frames have been collected the chroma vector is
- * normalised, matched against all 24 major/minor templates, and written to
- * @p result if the best score exceeds CHORD_THRESHOLD.  The accumulator is
- * reset after each match attempt regardless of outcome.
+ * normalised, matched against all 24 major/minor templates, and — if the best
+ * score exceeds CHORD_THRESHOLD — pushes the result to the web server directly.
+ * The accumulator is reset after each attempt regardless of outcome.
  *
  * @param magnitudes    Half-spectrum magnitude array (CHORD_FFT_SIZE/2 elements).
- * @param audio_samples Raw float audio samples used for amplitude calculation.
- * @param result        Output structure; @c result->valid is 0 if no chord
- *                      was recognised this call.
+ * @param audio_samples Raw float audio samples (unused, reserved for RMS gating).
  */
-void chord_detect(float *magnitudes, float *audio_samples, chord_result_t *result);
+void chord_detect(float *magnitudes, float *audio_samples);
 
 #endif // CHORD_H

@@ -5,6 +5,14 @@
 #include "dsps_fft2r.h"
 #include "dsps_wind.h"
 #include "chord.h"
+#include "server.h"
+
+typedef struct {
+    char  name[32];
+    int   valid;
+    char  notes[MAX_CHORD_NOTES][8];
+    int   note_count;
+} chord_result_t;
 
 static const char* TAG = "chord";
 
@@ -50,9 +58,9 @@ static float find_max(const float* arr, int size) {
     return max_val;
 }
 
-void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* result) {
-    result->valid = 0;
-    result->name[0] = '\0';
+void chord_detect(float* magnitudes, float* audio_samples) {
+    chord_result_t result_buf = { .valid = 0, .name = {0} };
+    chord_result_t* result = &result_buf;
 
     // Map each FFT bin in the guitar range to its pitch class and sum the magnitude.
     // Pitch class collapses octave information: C2, C3, and C4 all map to class 0,
@@ -134,6 +142,9 @@ void chord_detect(float* magnitudes, float* audio_samples, chord_result_t* resul
         strncpy(result->notes[2], NOTE_NAMES[(best_root + 7) % 12], 7);
         result->notes[0][7] = result->notes[1][7] = result->notes[2][7] = '\0';
 
+        web_server_update_chord(result->name,
+            (const char (*)[8])result->notes,
+            result->note_count);
         ESP_LOGI(TAG, "Chord: %s (Notes: %s, %s, %s)",
                  result->name, result->notes[0], result->notes[1], result->notes[2]);
     }

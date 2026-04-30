@@ -32,6 +32,7 @@ window.scrollTo(0, 0);
     function applySound(enabled) {
         if (typeof soundsEnabled !== 'undefined') soundsEnabled = enabled;
         soundIcon.innerHTML = enabled ? SVG_SOUND_ON : SVG_SOUND_OFF;
+        soundIcon.classList.toggle('muted', !enabled);
     }
     applySound(localStorage.getItem('sounds') !== 'false');
     soundIcon.addEventListener('click', function() {

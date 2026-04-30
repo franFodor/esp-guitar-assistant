@@ -14,7 +14,6 @@
 #include "dsps_wind.h"
 #include "esp_spiffs.h"
 
-#include "server.h"
 #include "note.h"
 #include "chord.h"
 
@@ -22,7 +21,7 @@
 #define SAMPLE_BITS     I2S_DATA_BIT_WIDTH_32BIT
 #define SAMPLE_CHANNELS 1
 #define FFT_SIZE        4096
-#define HOP_SIZE        512     // samples per I2S read; 8x overlap, ~32 ms per hop
+#define HOP_SIZE        2048
 
 #define I2S_BCK_IO      26
 #define I2S_WS_IO       25
@@ -82,7 +81,6 @@ static void audio_processor_task(void *pvParameters) {
     float          hann_window[FFT_SIZE];
     float          fft_buffer[FFT_SIZE * 2];
     audio_buffer_t audio_buf;
-    chord_result_t chord_result;
 
     dsps_fft2r_init_fc32(NULL, FFT_SIZE);
     dsps_wind_hann_f32(hann_window, FFT_SIZE);
@@ -96,8 +94,6 @@ static void audio_processor_task(void *pvParameters) {
         int n = (int)audio_buf.sample_count; // == HOP_SIZE
 
         // Slide the ring buffer left by one hop and append the new samples at the end.
-    // HOP_SIZE=512 with FFT_SIZE=4096 gives 8x overlap, so each new FFT reuses
-    // 87.5% of the previous window — this improves temporal resolution significantly.
         memmove(ring_buffer, ring_buffer + n, (FFT_SIZE - n) * sizeof(float));
         for (int i = 0; i < n; i++) {
             ring_buffer[FFT_SIZE - n + i] =
@@ -135,13 +131,7 @@ static void audio_processor_task(void *pvParameters) {
         if (web_server_get_mode() == DETECTION_MODE_NOTE) {
             note_frequency_analysis(magnitude, hps);
         } else {
-            chord_detect(magnitude, ring_buffer, &chord_result);
-            if (chord_result.valid) {
-                web_server_update_chord(chord_result.name,
-                    (const char (*)[8])chord_result.notes,
-                    chord_result.note_count);
-                ESP_LOGI("chord", "Detected: %s", chord_result.name);
-            }
+            chord_detect(magnitude, ring_buffer);
         }
     }
 
