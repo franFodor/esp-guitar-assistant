@@ -16,6 +16,7 @@
 
 #include "note.h"
 #include "chord.h"
+#include "server.h"
 
 #define SAMPLE_RATE     16000
 #define SAMPLE_BITS     I2S_DATA_BIT_WIDTH_32BIT

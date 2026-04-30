@@ -71,10 +71,10 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
         if (hps[i] > best_val) { best_val = hps[i]; best_bin = i; }
     }
 
-    // Octave correction: if the lower octave has >= 25% of the peak's HPS energy,
+    // Octave correction: if the lower octave has >= 20% of the peak's HPS energy,
     // the guitar fundamental is likely there — prefer it over the harmonic.
     int lower_bin = best_bin / 2;
-    if (lower_bin >= min_bin && hps[lower_bin] >= 0.25f * best_val)
+    if (lower_bin >= min_bin && hps[lower_bin] >= 0.2f * best_val)
         best_bin = lower_bin;
 
     return quadratic_interpolation(hps, best_bin);
