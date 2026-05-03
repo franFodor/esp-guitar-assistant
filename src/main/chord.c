@@ -59,6 +59,21 @@ static float find_max(const float* arr, int size) {
 }
 
 void chord_detect(float* magnitudes, float* audio_samples) {
+    // RMS gate - compute from magnitude spectrum
+    float rms = 0.0f;
+    int half_size = CHORD_FFT_SIZE / 2;
+    for (int k = 0; k < half_size; k++)
+        rms += magnitudes[k] * magnitudes[k];
+    rms = sqrtf(rms / half_size);
+
+    if (rms < CHORD_AMPLITUDE_THRESHOLD) {
+        // Silent frame - decay and reset so stale energy doesn't build up
+        for (int i = 0; i < NUM_PITCH_CLASSES; i++)
+            pitch_class_accumulator[i] *= 0.1f;
+        frame_count = 0;
+        return;
+    }
+
     chord_result_t result_buf = { .valid = 0, .name = {0} };
     chord_result_t* result = &result_buf;
 
@@ -66,7 +81,6 @@ void chord_detect(float* magnitudes, float* audio_samples) {
     // Pitch class collapses octave information: C2, C3, and C4 all map to class 0,
     // which is exactly what we want — chord identity is octave-independent.
     float pitch_energy[NUM_PITCH_CLASSES] = {0};
-    int half_size = CHORD_FFT_SIZE / 2;
     float freq_resolution = (float)CHORD_SAMPLE_RATE / CHORD_FFT_SIZE;
 
     for (int k = 0; k < half_size; k++) {

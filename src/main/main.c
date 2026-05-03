@@ -28,7 +28,7 @@
 #define I2S_WS_IO       25
 #define I2S_DI_IO       33
 
-#define SILENCE_THRESHOLD  0.002f
+#define SILENCE_THRESHOLD  0.01f
 
 #define I2S_READER_TASK_PRIO   5
 #define I2S_READER_STACK_SIZE  5000

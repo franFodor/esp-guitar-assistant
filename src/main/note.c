@@ -3,8 +3,8 @@
 
 static note_t chromatic_scale[] = {
     {"E2", 82.41},  {"F2", 87.31},   {"F#2", 92.50},  {"G2", 98.00},   {"G#2", 103.83},
-    {"A2", 110.00}, {"A#2", 116.54}, {"B2", 123.47},  {"C3", 130.81},  {"C#3", 138.59},
-    {"D3", 146.83}, {"D#3", 155.56}, {"E3", 164.81},  {"F3", 174.61},  {"F#3", 185.00},
+    {"A2", 109.00}, {"A#2", 116.54}, {"B2", 123.47},  {"C3", 130.81},  {"C#3", 138.59},
+    {"D3", 148.83}, {"D#3", 155.56}, {"E3", 164.81},  {"F3", 174.61},  {"F#3", 185.00},
     {"G3", 196.00}, {"G#3", 207.65}, {"A3", 220.00},  {"A#3", 233.08}, {"B3", 246.94},
     {"C4", 261.63}, {"C#4", 277.18}, {"D4", 293.66},  {"D#4", 311.13}, {"E4", 329.63},
     {"F4", 349.23}, {"F#4", 369.99}, {"G4", 392.00},  {"G#4", 415.30}, {"A4", 440.00},
@@ -17,7 +17,7 @@ static note_t chromatic_scale[] = {
 #define NUM_NOTES (sizeof(chromatic_scale) / sizeof(chromatic_scale[0]))
 
 // Persistence state: a note must be detected this many consecutive frames before publishing
-#define NOTE_STABILITY_FRAMES 3
+#define NOTE_STABILITY_FRAMES 2
 
 static char pending_note[8] = "";
 static int  pending_count = 0;
@@ -43,7 +43,7 @@ static float quadratic_interpolation(float* magnitudes, int peak_bin) {
 
 static float harmonic_product_spectrum(float* magnitudes, int half_size, float* hps) {
     float freq_res = (float)SAMPLE_RATE / FFT_SIZE;
-    const int R = 4;
+    const int R = 3;
 
     // Multiply downsampled copies of the spectrum together (R harmonics).
     // Each harmonic reinforces bins where a true fundamental is present:
@@ -60,7 +60,7 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
 
     // Search for the strongest peak within the guitar frequency range (70–1200 Hz
     // covers E2 on the low string up through the high frets of the top string).
-    int min_bin = (int)floorf(70.0f / freq_res);
+    int min_bin = (int)floorf(60.0f / freq_res);
     int max_bin = (int)ceilf(1200.0f / freq_res);
     if (min_bin < 1) min_bin = 1;
     if (max_bin >= half_size) max_bin = half_size - 1;
@@ -74,7 +74,7 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
     // Octave correction: if the lower octave has >= 20% of the peak's HPS energy,
     // the guitar fundamental is likely there — prefer it over the harmonic.
     int lower_bin = best_bin / 2;
-    if (lower_bin >= min_bin && hps[lower_bin] >= 0.2f * best_val)
+    if (lower_bin >= min_bin && hps[lower_bin] >= 0.5f * best_val)
         best_bin = lower_bin;
 
     return quadratic_interpolation(hps, best_bin);

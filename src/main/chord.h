@@ -37,7 +37,7 @@
  * Range 0–3 (sum of three template weights).  Lower values increase
  * sensitivity but also false-positive rate.
  */
-#define CHORD_THRESHOLD       0.4f
+#define CHORD_THRESHOLD       0.85f
 
 /**
  * @brief RMS amplitude threshold below which chord detection is skipped.
@@ -45,7 +45,7 @@
  * Adjust based on microphone gain.  Typical range: 0.01 (sensitive) to
  * 0.1 (requires loud strumming).
  */
-#define CHORD_AMPLITUDE_THRESHOLD  0.002f
+#define CHORD_AMPLITUDE_THRESHOLD  0.008f
 
 /** Maximum number of individual notes stored in a chord_result_t. */
 #define MAX_CHORD_NOTES 4
@@ -62,8 +62,8 @@ static const char *NOTE_NAMES[NUM_PITCH_CLASSES] = {
  * Indices represent semitones above the root; non-zero entries are chord tones.
  */
 static const float MAJOR_TEMPLATE[NUM_PITCH_CLASSES] = {
-    1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-    0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f
+    1.0f, 0.0f, 0.0f, 0.0f, 0.8f, 0.0f,
+    0.0f, 0.7f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
 /**
@@ -72,8 +72,8 @@ static const float MAJOR_TEMPLATE[NUM_PITCH_CLASSES] = {
  * Indices represent semitones above the root; non-zero entries are chord tones.
  */
 static const float MINOR_TEMPLATE[NUM_PITCH_CLASSES] = {
-    1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-    0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f
+    1.0f, 0.0f, 0.0f, 0.8f, 0.0f, 0.0f,
+    0.0f, 0.7f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
 /**
