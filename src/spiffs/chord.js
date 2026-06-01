@@ -211,22 +211,9 @@ function renderDropdown() {
     dropdown.value = selectedChordName;
 }
 
-function updateChordImage(chordName) {
-    const img = document.getElementById('chord-img');
-    const placeholder = document.getElementById('chord-img-placeholder');
-    const nameEl = document.getElementById('chord-img-name');
-    if (nameEl) nameEl.textContent = chordName;
-    if (!img) return;
-    const normalized = chordName.replace(/ /g, '_').replace(/#/g, 'sharp');
-    img.src = `chord_images/${normalized}.png`;
-    img.onload = () => { img.style.display = 'block'; if (placeholder) placeholder.style.display = 'none'; };
-    img.onerror = () => { img.style.display = 'none'; if (placeholder) placeholder.style.display = 'flex'; };
-}
-
 function handleDropdownChange(e) {
     selectedChordName = e.target.value;
     renderFretboard(CHORDS[selectedChordName].positions);
-    updateChordImage(selectedChordName);
 
     // Update target notes display
     const targetNotesEl = document.getElementById('target-notes-display');
@@ -340,8 +327,7 @@ $(document).ready(function() {
     // Initialize dropdown and fretboard
     renderDropdown();
     renderFretboard(CHORDS[selectedChordName].positions);
-    updateChordImage(selectedChordName);
-    
+
     // Show target notes for initial chord
     const targetNotesEl = document.getElementById('target-notes-display');
     const initialChordData = CHORDS[selectedChordName];
