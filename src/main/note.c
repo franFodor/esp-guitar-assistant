@@ -3,8 +3,8 @@
 
 static note_t chromatic_scale[] = {
     {"E2", 82.41},  {"F2", 87.31},   {"F#2", 92.50},  {"G2", 98.00},   {"G#2", 103.83},
-    {"A2", 109.00}, {"A#2", 116.54}, {"B2", 123.47},  {"C3", 130.81},  {"C#3", 138.59},
-    {"D3", 148.83}, {"D#3", 155.56}, {"E3", 164.81},  {"F3", 174.61},  {"F#3", 185.00},
+    {"A2", 110.00}, {"A#2", 116.54}, {"B2", 123.47},  {"C3", 130.81},  {"C#3", 138.59},
+    {"D3", 146.83}, {"D#3", 155.56}, {"E3", 164.81},  {"F3", 174.61},  {"F#3", 185.00},
     {"G3", 196.00}, {"G#3", 207.65}, {"A3", 220.00},  {"A#3", 233.08}, {"B3", 246.94},
     {"C4", 261.63}, {"C#4", 277.18}, {"D4", 293.66},  {"D#4", 311.13}, {"E4", 329.63},
     {"F4", 349.23}, {"F#4", 369.99}, {"G4", 392.00},  {"G#4", 415.30}, {"A4", 440.00},
@@ -41,16 +41,13 @@ static float quadratic_interpolation(float* magnitudes, int peak_bin) {
     return ((float)peak_bin + p) * SAMPLE_RATE / FFT_SIZE;
 }
 
-static float harmonic_product_spectrum(float* magnitudes, int half_size, float* hps) {
+static float harmonic_product_spectrum(float* magnitudes, int half_size, float* hps, float* confidence_out) {
     float freq_res = (float)SAMPLE_RATE / FFT_SIZE;
-    const int R = 3;
+    // R=5: five harmonics give much better discrimination between a guitar note
+    // (which has strong energy at many harmonics) and power-line hum or other
+    // tonal noise (which typically has fewer or weaker high harmonics).
+    const int R = 5;
 
-    // Multiply downsampled copies of the spectrum together (R harmonics).
-    // Each harmonic reinforces bins where a true fundamental is present:
-    // if bin k is the fundamental, bins 2k, 3k … Rk also have energy, so
-    // only the true fundamental survives all R multiplications at full strength.
-    // R=4 means we check up to the 4th harmonic (enough for guitar without
-    // pulling in unrelated pitches from neighbouring strings).
     for (int i = 0; i < half_size; i++) hps[i] = 1.0f;
     for (int r = 1; r <= R; r++) {
         int limit = half_size / r;
@@ -58,12 +55,10 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
         for (int i = limit; i < half_size; i++) hps[i] = 0.0f;
     }
 
-    // Search for the strongest peak within the guitar frequency range (70–1200 Hz
-    // covers E2 on the low string up through the high frets of the top string).
     int min_bin = (int)floorf(60.0f / freq_res);
     int max_bin = (int)ceilf(1200.0f / freq_res);
     if (min_bin < 1) min_bin = 1;
-    if (max_bin >= half_size) max_bin = half_size - 1;
+    if (max_bin >= half_size / R) max_bin = half_size / R - 1;
 
     int best_bin = min_bin;
     float best_val = hps[min_bin];
@@ -71,10 +66,21 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
         if (hps[i] > best_val) { best_val = hps[i]; best_bin = i; }
     }
 
-    // Octave correction: if the lower octave has >= 20% of the peak's HPS energy,
-    // the guitar fundamental is likely there — prefer it over the harmonic.
+    // Confidence = peak / geometric-mean of the HPS floor in the search range.
+    // A true guitar note produces a sharp spike well above the surrounding floor;
+    // noise or hum produces a relatively flat HPS with a small peak-to-floor ratio.
+    float log_sum = 0.0f;
+    for (int i = min_bin; i <= max_bin; i++) log_sum += logf(hps[i] + 1e-30f);
+    float hps_floor = expf(log_sum / (float)(max_bin - min_bin + 1));
+    *confidence_out = (hps_floor > 1e-30f) ? (best_val / hps_floor) : 0.0f;
+
+    // Octave correction: prefer the lower octave when it has meaningful HPS energy.
+    // Threshold 0.35: the MEMS mic attenuates the low-string fundamentals (E2, A2)
+    // by several dB, so hps[fundamental] is never close to hps[2nd_harmonic] even
+    // when the string is clearly ringing. The pre-emphasis in note_frequency_analysis
+    // partially compensates, but 0.35 is needed to catch the remaining cases.
     int lower_bin = best_bin / 2;
-    if (lower_bin >= min_bin && hps[lower_bin] >= 0.5f * best_val)
+    if (lower_bin >= min_bin && hps[lower_bin] >= 0.35f * best_val)
         best_bin = lower_bin;
 
     return quadratic_interpolation(hps, best_bin);
@@ -82,11 +88,13 @@ static float harmonic_product_spectrum(float* magnitudes, int half_size, float* 
 
 const char* note_find_closest(float frequency, float* cents_offset) {
     const char* note = "Unknown";
-    float min_diff = 1e9f;
+    float min_cents = 1e9f;
     for (int i = 0; i < NUM_NOTES; i++) {
-        float diff = fabsf(frequency - chromatic_scale[i].frequency);
-        if (diff < min_diff) {
-            min_diff = diff;
+        // Use cents (log ratio) so every semitone interval is treated equally
+        // regardless of register — a plain Hz difference biases toward low notes.
+        float c = fabsf(1200.0f * log2f(frequency / chromatic_scale[i].frequency));
+        if (c < min_cents) {
+            min_cents = c;
             note = chromatic_scale[i].name;
             *cents_offset = 1200.0f * log2f(frequency / chromatic_scale[i].frequency);
         }
@@ -94,23 +102,47 @@ const char* note_find_closest(float frequency, float* cents_offset) {
     return note;
 }
 
+// Minimum ratio of HPS peak to HPS geometric-mean floor required to process the frame.
+#define HPS_CONFIDENCE_THRESHOLD 8.0f
+// Maximum |cents| from the nearest chromatic note to accept a detection.
+// Hum detections (60-75 Hz vs E2 at 82 Hz) land 150-700 cents away; normally-tuned
+// strings are within ±50 cents. 70 gives headroom for a slightly detuned instrument.
+#define CENTS_WINDOW 70.0f
+
+// Approximate INMP441 low-frequency -3 dB point. Tune this up if E2/A2 are
+// still detected an octave high; tune it down if high strings are pulled flat.
+#define MIC_FC 150.0f
+
 void note_frequency_analysis(float* magnitudes, float* hps) {
-    // Compress the dynamic range of the magnitude spectrum before HPS so that
-    // quieter harmonics still contribute without being drowned out by loud ones.
-    // Exponent 0.65 was chosen empirically: lower values over-boost noise,
-    // higher values underweight weak harmonics and hurt HPS accuracy.
+    // Boost low frequencies to compensate for the INMP441's high-pass roll-off.
+    // Without this, the 82 Hz fundamental of the low E string is suppressed by
+    // the microphone and the HPS incorrectly finds the 2nd harmonic (164 Hz = E3).
+    // The correction is 1/|H_HPF(f)| = sqrt(1 + (fc/f)^2) for a 1st-order HPF.
+    float freq_res_local = (float)SAMPLE_RATE / FFT_SIZE;
+    for (int i = 1; i < FFT_SIZE / 2; i++) {
+        float f = i * freq_res_local;
+        if (f < 500.0f)
+            magnitudes[i] *= sqrtf(1.0f + (MIC_FC / f) * (MIC_FC / f));
+    }
+
     for (int i = 1; i < FFT_SIZE/2; i++)
         magnitudes[i] = powf(magnitudes[i] + 1e-20f, 0.65f);
 
-    float freq = harmonic_product_spectrum(magnitudes, FFT_SIZE/2, hps);
+    float confidence;
+    float freq = harmonic_product_spectrum(magnitudes, FFT_SIZE/2, hps, &confidence);
+
+    // Skip frames with no clear harmonic peak — don't touch pending state so
+    // that a brief noise burst between valid frames doesn't break the counter.
+    if (confidence < HPS_CONFIDENCE_THRESHOLD) return;
 
     float cents;
     const char* note = note_find_closest(freq, &cents);
-    // cents = 1200 * log2(f / f_reference) — positive means sharp, negative means flat.
 
-    // Require the same note for NOTE_STABILITY_FRAMES consecutive frames
-    // before publishing to avoid flickering on transients. A pluck attack
-    // often reads a slightly wrong pitch for one or two hops before settling.
+    // Skip frames whose detected frequency is implausibly far from any note.
+    // This rejects hum and sub-fundamental artefacts without touching the counter.
+    if (fabsf(cents) > CENTS_WINDOW) return;
+
+    // Only update pending state on genuinely valid frames.
     if (strcmp(note, pending_note) == 0) {
         if (pending_count < NOTE_STABILITY_FRAMES)
             pending_count++;
@@ -120,10 +152,9 @@ void note_frequency_analysis(float* magnitudes, float* hps) {
         pending_count = 1;
     }
 
-    // Once stable, keep publishing every frame so freq/cents stay live
     if (pending_count >= NOTE_STABILITY_FRAMES) {
         web_server_update_note(note, freq, cents);
-        ESP_LOGI("note", "NOTE: %s  %.2f Hz cent: %.2f", note, freq, cents);
+        ESP_LOGI("note", "NOTE: %s  %.2f Hz cent: %.2f conf: %.1f", note, freq, cents, confidence);
     }
 }
 
