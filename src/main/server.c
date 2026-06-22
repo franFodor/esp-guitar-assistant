@@ -1,6 +1,7 @@
 #include "server.h"
 #include "chord.h"
 #include "wifi_manager.h"
+#include <errno.h>
 
 static httpd_handle_t server = NULL;
 
@@ -21,8 +22,94 @@ static int current_note_count = 0;
 static SemaphoreHandle_t chord_mutex;
 static char cached_chord_response[256] = "{\"chord\":\"None\",\"notes\":[]}";
 
+// SSE semaphores — given each time new note/chord data is ready
+static SemaphoreHandle_t note_sse_sem  = NULL;
+static SemaphoreHandle_t chord_sse_sem = NULL;
+
 
 static const char *TAG = "wifi_ap";
+
+/* ---------- SSE TASKS ---------- */
+
+static void note_sse_task(void *arg) {
+    httpd_req_t *req = (httpd_req_t *)arg;
+    char buf[160];
+    while (1) {
+        if (xSemaphoreTake(note_sse_sem, pdMS_TO_TICKS(20000)) == pdTRUE) {
+            xSemaphoreTake(note_mutex, portMAX_DELAY);
+            int len = snprintf(buf, sizeof(buf), "data: %s\n\n", cached_note_response);
+            xSemaphoreGive(note_mutex);
+            if (httpd_resp_send_chunk(req, buf, len) != ESP_OK) {
+                if (errno == EAGAIN) continue;  // WiFi busy (e.g. scan), skip event
+                break;
+            }
+        } else {
+            if (httpd_resp_send_chunk(req, ": ping\n\n", 8) != ESP_OK) {
+                if (errno == EAGAIN) continue;
+                break;
+            }
+        }
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    httpd_req_async_handler_complete(req);
+    vTaskDelete(NULL);
+}
+
+static void chord_sse_task(void *arg) {
+    httpd_req_t *req = (httpd_req_t *)arg;
+    char buf[288];
+    while (1) {
+        if (xSemaphoreTake(chord_sse_sem, pdMS_TO_TICKS(20000)) == pdTRUE) {
+            xSemaphoreTake(chord_mutex, portMAX_DELAY);
+            int len = snprintf(buf, sizeof(buf), "data: %s\n\n", cached_chord_response);
+            xSemaphoreGive(chord_mutex);
+            if (httpd_resp_send_chunk(req, buf, len) != ESP_OK) {
+                if (errno == EAGAIN) continue;
+                break;
+            }
+        } else {
+            if (httpd_resp_send_chunk(req, ": ping\n\n", 8) != ESP_OK) {
+                if (errno == EAGAIN) continue;
+                break;
+            }
+        }
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    httpd_req_async_handler_complete(req);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t api_note_sse_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/event-stream");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_req_t *async_req;
+    if (httpd_req_async_handler_begin(req, &async_req) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "async failed");
+        return ESP_FAIL;
+    }
+    if (xTaskCreate(note_sse_task, "note_sse", 8192, async_req, 3, NULL) != pdPASS) {
+        httpd_req_async_handler_complete(async_req);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t api_chord_sse_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/event-stream");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_req_t *async_req;
+    if (httpd_req_async_handler_begin(req, &async_req) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "async failed");
+        return ESP_FAIL;
+    }
+    if (xTaskCreate(chord_sse_task, "chord_sse", 8192, async_req, 3, NULL) != pdPASS) {
+        httpd_req_async_handler_complete(async_req);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
 
 
 /* ---------- HTTP HANDLERS ---------- */
@@ -44,13 +131,21 @@ static esp_err_t file_get_handler(httpd_req_t *req) {
     FILE *f = fopen(path, "r");
     if (!f) {
         httpd_resp_send_404(req);
-        return ESP_FAIL;
+        return ESP_OK;
     }
 
-    // Set Content-Type based on file extension
-    if (strstr(path, ".html"))      httpd_resp_set_type(req, "text/html");
-    else if (strstr(path, ".css"))  httpd_resp_set_type(req, "text/css");
-    else if (strstr(path, ".js"))   httpd_resp_set_type(req, "application/javascript");
+    // Set Content-Type and caching based on file extension.
+    // JS and CSS are versioned by content so they can be cached long-term;
+    // HTML is not cached so navigation always loads the latest markup.
+    if (strstr(path, ".html")) {
+        httpd_resp_set_type(req, "text/html");
+    } else if (strstr(path, ".css")) {
+        httpd_resp_set_type(req, "text/css");
+        httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+    } else if (strstr(path, ".js")) {
+        httpd_resp_set_type(req, "application/javascript");
+        httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+    }
 
     // Stream file contents in 1 KB chunks to avoid large stack buffers
     char buf[1024];
@@ -172,6 +267,7 @@ void web_server_update_note(const char *note, float frequency, float cents) {
              "{\"note\":\"%s\",\"frequency\":%.2f,\"cents\":%.1f}",
              current_note, current_freq, current_cents);
     xSemaphoreGive(note_mutex);
+    if (note_sse_sem) xSemaphoreGive(note_sse_sem);
 }
 
 void web_server_update_chord(const char *chord, const char notes[][8], int note_count) {
@@ -202,21 +298,19 @@ void web_server_update_chord(const char *chord, const char notes[][8], int note_
     snprintf(cached_chord_response, sizeof(cached_chord_response),
              "{\"chord\":\"%s\",\"notes\":%s}",
              current_chord, notes_json);
-
     xSemaphoreGive(chord_mutex);
+    if (chord_sse_sem) xSemaphoreGive(chord_sse_sem);
 }
 
 void web_server_start(void) {
     note_mutex  = xSemaphoreCreateMutex();
     chord_mutex = xSemaphoreCreateMutex();
+    note_sse_sem  = xSemaphoreCreateBinary();
+    chord_sse_sem = xSemaphoreCreateBinary();
 
-    // Start the HTTP server with wildcard URI matching so the file handler
-    // catches any path that the more specific API handlers don't claim first.
-    // esp_http_server matches in registration order, so API handlers must be
-    // registered before the "/*" wildcard handler below.
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn   = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 14;
 
     httpd_start(&server, &config);
 
@@ -271,6 +365,20 @@ void web_server_start(void) {
         .handler = api_wifi_disconnect_handler
     };
 
+    httpd_uri_t api_note_sse = {
+        .uri     = "/api/note/events",
+        .method  = HTTP_GET,
+        .handler = api_note_sse_handler
+    };
+
+    httpd_uri_t api_chord_sse = {
+        .uri     = "/api/chord/events",
+        .method  = HTTP_GET,
+        .handler = api_chord_sse_handler
+    };
+
+    httpd_register_uri_handler(server, &api_note_sse);
+    httpd_register_uri_handler(server, &api_chord_sse);
     httpd_register_uri_handler(server, &api_note);
     httpd_register_uri_handler(server, &api_chord);
     httpd_register_uri_handler(server, &api_mode);

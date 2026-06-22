@@ -164,23 +164,8 @@ function handleTuningDropdownChange(e) {
     selectTuning(e.target.value);
 }
 
-async function update() {
-    let j;
-    if (TEST_MODE) {
-        j = {frequency: 111.0, note: "A", cents: 2.5};
-    } else {
-        const r = await fetch("/api/note");
-        j = await r.json();
-    }
-
+function processNote(j) {
     if (j.frequency <= 0) {
-        if (lastDetectedTime !== null && Date.now() - lastDetectedTime > SILENCE_TIMEOUT_MS) {
-            document.getElementById("note").textContent = "--";
-            document.getElementById("cents").textContent = "0 cents";
-            document.getElementById("needle").style.transform = "rotate(0deg)";
-            lastDetectedTime = null;
-            resetStringIndicators();
-        }
         tuneStringIdx = -1;
         tuneStart = null;
         return;
@@ -195,7 +180,6 @@ async function update() {
     const clamped = Math.max(-50, Math.min(50, j.cents));
     document.getElementById("needle").style.transform = `rotate(${clamped}deg)`;
 
-    // String indicator highlighting
     const matchedIdx = findBestMatchingString(j.note, j.frequency);
     const inTune = Math.abs(j.cents) <= 10;
     const tuning = tunings[currentTuning];
@@ -233,7 +217,23 @@ async function update() {
     });
 }
 
-setInterval(update, 50);
+// Reset UI to idle after SILENCE_TIMEOUT_MS with no incoming events
+setInterval(() => {
+    if (lastDetectedTime !== null && Date.now() - lastDetectedTime > SILENCE_TIMEOUT_MS) {
+        document.getElementById("note").textContent = "--";
+        document.getElementById("cents").textContent = "0 cents";
+        document.getElementById("needle").style.transform = "rotate(0deg)";
+        lastDetectedTime = null;
+        resetStringIndicators();
+    }
+}, 500);
+
+if (TEST_MODE) {
+    setInterval(() => processNote({frequency: 111.0, note: "A", cents: 2.5}), 200);
+} else {
+    const noteStream = new EventSource('/api/note/events');
+    noteStream.onmessage = (e) => processNote(JSON.parse(e.data));
+}
 
 $(document).on('click', function(e) {
     if (!$(e.target).closest('.dropdown').length) {
@@ -245,5 +245,4 @@ $(document).ready(function() {
     fetch('/api/mode', { method: 'POST', body: 'note' }).catch(() => {});
     renderTuningDropdown();
     document.getElementById('tuning-dropdown').addEventListener('change', handleTuningDropdownChange);
-    update();
 });

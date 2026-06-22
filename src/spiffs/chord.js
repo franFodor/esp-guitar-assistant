@@ -172,27 +172,13 @@ function highlightDetectedNotes(notes, isCorrect) {
     }
 }
 
-async function fetchChord() {
+function processChord(data) {
     if (!isListening) return;
-    try {
-        let data;
-        if (TEST_MODE) {
-            // In test mode, always detect A major regardless of selection
-            // This lets you test: select A major = green, select anything else = red
-            data = { chord: "A major", notes: ["A", "C#", "E"] };
-        } else {
-            const response = await fetch('/api/chord');
-            data = await response.json();
+    if (data.chord !== detectedChordName || JSON.stringify(data.notes) !== JSON.stringify(detectedNotes)) {
+        if (CHORDS[selectedChordName]) {
+            renderFretboard(CHORDS[selectedChordName].positions);
         }
-        if (data.chord !== detectedChordName || JSON.stringify(data.notes) !== JSON.stringify(detectedNotes)) {
-            // Render base fretboard first, then apply highlights on top
-            if (CHORDS[selectedChordName]) {
-                renderFretboard(CHORDS[selectedChordName].positions);
-            }
-            updateChordDisplay(data.chord, data.notes);
-        }
-    } catch (error) {
-        console.error('Error fetching chord:', error);
+        updateChordDisplay(data.chord, data.notes);
     }
 }
 
@@ -313,7 +299,6 @@ function renderFretboard(chordPositions = null) {
 $(document).ready(function() {
     fetch('/api/mode', { method: 'POST', body: 'chord' }).catch(() => {});
 
-    // Load navigation
     fetch('nav.html')
         .then(response => response.text())
         .then(data => {
@@ -321,8 +306,12 @@ $(document).ready(function() {
             $('#nav-chord').addClass('active').append('<span class="sr-only">(current)</span>');
         });
 
-    // Start polling for chord data (includes notes)
-    setInterval(fetchChord, 50);
+    if (TEST_MODE) {
+        setInterval(() => processChord({ chord: "A major", notes: ["A", "C#", "E"] }), 200);
+    } else {
+        const chordStream = new EventSource('/api/chord/events');
+        chordStream.onmessage = (e) => processChord(JSON.parse(e.data));
+    }
 
     // Initialize dropdown and fretboard
     renderDropdown();
