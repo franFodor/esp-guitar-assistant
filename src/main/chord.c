@@ -2,173 +2,158 @@
 #include <string.h>
 #include <math.h>
 #include "esp_log.h"
-#include "dsps_fft2r.h"
-#include "dsps_wind.h"
 #include "chord.h"
 #include "server.h"
 
-typedef struct {
-    char  name[32];
-    int   valid;
-    char  notes[MAX_CHORD_NOTES][8];
-    int   note_count;
-} chord_result_t;
+static const char *TAG = "chord";
 
-static const char* TAG = "chord";
-
-// Accumulated pitch class energy over multiple frames
 static float pitch_class_accumulator[NUM_PITCH_CLASSES] = {0};
-static int frame_count = 0;
-
+static int   frame_count   = 0;
+static char  pending_chord[32] = "";
+static int   pending_count = 0;
 
 static int freq_to_pitch_class(float freq) {
-    // MIDI note number: 69 + 12 * log2(freq / 440)
     float midi = 69.0f + 12.0f * log2f(freq / 440.0f);
-    // Round to nearest semitone
     int note_number = (int)(midi + 0.5f);
-    // Convert to pitch class (0-11)
     int pitch_class = note_number % 12;
-    if (pitch_class < 0) {
-        pitch_class += 12;
-    }
+    if (pitch_class < 0) pitch_class += 12;
     return pitch_class;
 }
 
-static void roll_template(const float* template, int shift, float* output) {
-    for (int i = 0; i < NUM_PITCH_CLASSES; i++) {
+static void roll_template(const float *template, int shift, float *output) {
+    for (int i = 0; i < NUM_PITCH_CLASSES; i++)
         output[(i + shift) % NUM_PITCH_CLASSES] = template[i];
-    }
 }
 
-static float dot_product(const float* a, const float* b) {
+static float dot_product(const float *a, const float *b) {
     float sum = 0.0f;
-    for (int i = 0; i < NUM_PITCH_CLASSES; i++) {
+    for (int i = 0; i < NUM_PITCH_CLASSES; i++)
         sum += a[i] * b[i];
-    }
     return sum;
 }
 
-static float find_max(const float* arr, int size) {
-    float max_val = arr[0];
-    for (int i = 1; i < size; i++) {
-        if (arr[i] > max_val) {
-            max_val = arr[i];
-        }
-    }
-    return max_val;
-}
+void chord_detect(float *magnitudes, float *audio_samples) {
+    int   half_size = CHORD_FFT_SIZE / 2;                         // 2048
+    float freq_res  = (float)CHORD_SAMPLE_RATE / CHORD_FFT_SIZE;  // ~3.906 Hz/bin
 
-void chord_detect(float* magnitudes, float* audio_samples) {
-    // RMS gate - compute from magnitude spectrum
+    // Time-domain RMS from the ring-buffer — calibrated on the same [-1,1] scale
+    // as the SILENCE_THRESHOLD in main.c, unlike a spectrum-domain RMS which is
+    // on a completely different scale and was far too easy to pass.
     float rms = 0.0f;
-    int half_size = CHORD_FFT_SIZE / 2;
-    for (int k = 0; k < half_size; k++)
-        rms += magnitudes[k] * magnitudes[k];
-    rms = sqrtf(rms / half_size);
+    for (int i = 0; i < CHORD_FFT_SIZE; i++) {
+        float s = audio_samples[i];
+        rms += s * s;
+    }
+    rms = sqrtf(rms / CHORD_FFT_SIZE);
 
     if (rms < CHORD_AMPLITUDE_THRESHOLD) {
-        // Silent frame - decay and reset so stale energy doesn't build up
-        for (int i = 0; i < NUM_PITCH_CLASSES; i++)
-            pitch_class_accumulator[i] *= 0.1f;
-        frame_count = 0;
+        memset(pitch_class_accumulator, 0, sizeof(pitch_class_accumulator));
+        frame_count   = 0;
+        pending_count = 0;
         return;
     }
 
-    chord_result_t result_buf = { .valid = 0, .name = {0} };
-    chord_result_t* result = &result_buf;
+    // Pre-emphasis: inverse of INMP441's 1st-order HPF — same formula as note.c.
+    // Without this, the 82–110 Hz fundamentals of the low strings are suppressed
+    // and their 2nd harmonics inflate the wrong pitch classes.
+    for (int i = 1; i < half_size; i++) {
+        float f = i * freq_res;
+        if (f < 500.0f)
+            magnitudes[i] *= sqrtf(1.0f + (MIC_FC_CHORD / f) * (MIC_FC_CHORD / f));
+    }
 
-    // Map each FFT bin in the guitar range to its pitch class and sum the magnitude.
-    // Pitch class collapses octave information: C2, C3, and C4 all map to class 0,
-    // which is exactly what we want — chord identity is octave-independent.
+    // Power compression — prevents one loud string from drowning all others.
+    for (int i = 1; i < half_size; i++)
+        magnitudes[i] = powf(magnitudes[i] + 1e-20f, 0.65f);
+
+    // Accumulate pitch-class energy across the search window.
+    // Pitch class collapses octaves: C2, C3, C4 all land on class 0.
     float pitch_energy[NUM_PITCH_CLASSES] = {0};
-    float freq_resolution = (float)CHORD_SAMPLE_RATE / CHORD_FFT_SIZE;
-
-    for (int k = 0; k < half_size; k++) {
-        float freq = k * freq_resolution;
+    for (int k = 1; k < half_size; k++) {
+        float freq = k * freq_res;
         if (freq < CHORD_MIN_FREQ || freq > CHORD_MAX_FREQ) continue;
         pitch_energy[freq_to_pitch_class(freq)] += magnitudes[k];
     }
-
-    // Accumulate across frames for a more stable chroma vector. A single FFT frame
-    // can be dominated by the attack transient of one string, so averaging over
-    // FRAMES_TO_ACCUMULATE hops gives the sustained harmonic content time to settle.
     for (int i = 0; i < NUM_PITCH_CLASSES; i++)
         pitch_class_accumulator[i] += pitch_energy[i];
     frame_count++;
 
     if (frame_count < FRAMES_TO_ACCUMULATE) return;
 
-    // Normalise accumulated energy to [0, 1]
+    // Copy accumulated energy and reset for the next window.
     memcpy(pitch_energy, pitch_class_accumulator, sizeof(pitch_energy));
-    float max_val = find_max(pitch_energy, NUM_PITCH_CLASSES);
-    if (max_val > 0.0f) {
-        for (int i = 0; i < NUM_PITCH_CLASSES; i++)
-            pitch_energy[i] /= max_val;
-    }
-
-    // Partial sort to find the three dominant pitch classes for debug logging
-    int sorted_indices[NUM_PITCH_CLASSES];
-    for (int i = 0; i < NUM_PITCH_CLASSES; i++) sorted_indices[i] = i;
-    for (int i = 0; i < 3; i++) {
-        for (int j = i + 1; j < NUM_PITCH_CLASSES; j++) {
-            if (pitch_energy[sorted_indices[j]] > pitch_energy[sorted_indices[i]]) {
-                int temp = sorted_indices[i];
-                sorted_indices[i] = sorted_indices[j];
-                sorted_indices[j] = temp;
-            }
-        }
-    }
-    ESP_LOGD(TAG, "Top pitch classes: %s, %s, %s",
-             NOTE_NAMES[sorted_indices[0]],
-             NOTE_NAMES[sorted_indices[1]],
-             NOTE_NAMES[sorted_indices[2]]);
-
-    // Score all 24 major/minor chords via dot product against circularly shifted templates.
-    // Rolling the template by `root` semitones is equivalent to testing the chord rooted
-    // at that pitch class — one rotation covers all 12 keys for each quality.
-    float best_score = 0.0f;
-    int best_root = 0;
-    int is_major = 1;
-    float rolled_template[NUM_PITCH_CLASSES];
-
-    for (int root = 0; root < NUM_PITCH_CLASSES; root++) {
-        roll_template(MAJOR_TEMPLATE, root, rolled_template);
-        float major_score = dot_product(pitch_energy, rolled_template);
-        if (major_score > best_score) { best_score = major_score; best_root = root; is_major = 1; }
-
-        roll_template(MINOR_TEMPLATE, root, rolled_template);
-        float minor_score = dot_product(pitch_energy, rolled_template);
-        if (minor_score > best_score) { best_score = minor_score; best_root = root; is_major = 0; }
-    }
-
-    // Accept the best match only if it clears the confidence threshold
-    if (best_score >= CHORD_THRESHOLD) {
-        result->valid = 1;
-        if (is_major)
-            snprintf(result->name, sizeof(result->name), "%s major", NOTE_NAMES[best_root]);
-        else
-            snprintf(result->name, sizeof(result->name), "%s minor", NOTE_NAMES[best_root]);
-
-        // Fill constituent notes: root, third (major=+4, minor=+3 semitones), perfect fifth (+7)
-        result->note_count = 3;
-        strncpy(result->notes[0], NOTE_NAMES[best_root], 7);
-        strncpy(result->notes[1], NOTE_NAMES[(best_root + (is_major ? 4 : 3)) % 12], 7);
-        strncpy(result->notes[2], NOTE_NAMES[(best_root + 7) % 12], 7);
-        result->notes[0][7] = result->notes[1][7] = result->notes[2][7] = '\0';
-
-        web_server_update_chord(result->name,
-            (const char (*)[8])result->notes,
-            result->note_count);
-        ESP_LOGI(TAG, "Chord: %s (Notes: %s, %s, %s)",
-                 result->name, result->notes[0], result->notes[1], result->notes[2]);
-    }
-
-    // Reset accumulator for the next detection window
     memset(pitch_class_accumulator, 0, sizeof(pitch_class_accumulator));
     frame_count = 0;
+
+    // L2-normalise: makes the chord score a proper cosine similarity in [0,1].
+    // Old approach (max-normalise) gave flat noise a free 1.0 on the dominant
+    // pitch class, so every template always scored its root weight — indistinguishable
+    // from an actual chord. Cosine similarity gives flat noise ~0.50, a real chord ~0.85+.
+    float l2_sum = 0.0f;
+    for (int i = 0; i < NUM_PITCH_CLASSES; i++)
+        l2_sum += pitch_energy[i] * pitch_energy[i];
+    float l2_norm = sqrtf(l2_sum + 1e-30f);
+    for (int i = 0; i < NUM_PITCH_CLASSES; i++)
+        pitch_energy[i] /= l2_norm;
+
+    // Template L2 norm — both templates have the same three-weight structure.
+    // sqrt(1.0^2 + 0.8^2 + 0.7^2) = sqrt(2.13) ≈ 1.456
+    static const float TEMPLATE_NORM = 1.4560f;
+
+    float best_score = 0.0f;
+    int   best_root  = 0;
+    int   is_major   = 1;
+    float rolled[NUM_PITCH_CLASSES];
+
+    for (int root = 0; root < NUM_PITCH_CLASSES; root++) {
+        roll_template(MAJOR_TEMPLATE, root, rolled);
+        float s = dot_product(pitch_energy, rolled) / TEMPLATE_NORM;
+        if (s > best_score) { best_score = s; best_root = root; is_major = 1; }
+
+        roll_template(MINOR_TEMPLATE, root, rolled);
+        s = dot_product(pitch_energy, rolled) / TEMPLATE_NORM;
+        if (s > best_score) { best_score = s; best_root = root; is_major = 0; }
+    }
+
+    ESP_LOGD(TAG, "best: %s %s  score: %.3f",
+             NOTE_NAMES[best_root], is_major ? "major" : "minor", best_score);
+
+    if (best_score < CHORD_THRESHOLD) {
+        pending_count = 0;
+        return;
+    }
+
+    char chord_name[32];
+    if (is_major)
+        snprintf(chord_name, sizeof(chord_name), "%s major", NOTE_NAMES[best_root]);
+    else
+        snprintf(chord_name, sizeof(chord_name), "%s minor", NOTE_NAMES[best_root]);
+
+    if (strcmp(chord_name, pending_chord) == 0) {
+        if (pending_count < CHORD_STABILITY_FRAMES)
+            pending_count++;
+    } else {
+        strncpy(pending_chord, chord_name, sizeof(pending_chord) - 1);
+        pending_chord[sizeof(pending_chord) - 1] = '\0';
+        pending_count = 1;
+    }
+
+    if (pending_count >= CHORD_STABILITY_FRAMES) {
+        char notes[3][8];
+        strncpy(notes[0], NOTE_NAMES[best_root], 7);
+        strncpy(notes[1], NOTE_NAMES[(best_root + (is_major ? 4 : 3)) % 12], 7);
+        strncpy(notes[2], NOTE_NAMES[(best_root + 7) % 12], 7);
+        notes[0][7] = notes[1][7] = notes[2][7] = '\0';
+
+        web_server_update_chord(chord_name, (const char (*)[8])notes, 3);
+        ESP_LOGI(TAG, "Chord: %s (Notes: %s, %s, %s)  score: %.2f",
+                 chord_name, notes[0], notes[1], notes[2], best_score);
+    }
 }
 
 void chord_init(void) {
     memset(pitch_class_accumulator, 0, sizeof(pitch_class_accumulator));
-    frame_count = 0;
+    frame_count   = 0;
+    pending_count = 0;
+    pending_chord[0] = '\0';
 }
